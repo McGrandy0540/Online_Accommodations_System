@@ -949,10 +949,5 @@ if ($user_type === 'student') {
         }
     });
     </script>
-
-
-<div class="me">
-    Hi just added a new review to the database
-</div>
 </body>
 </html>
