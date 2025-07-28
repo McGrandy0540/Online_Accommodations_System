@@ -1,0 +1,16 @@
+{
+    "name": "godwi/online_accommodation_system",
+    "autoload": {
+        "psr-4": {
+            "Godwi\\OnlineAccommodationSystem\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Appiah Joseph"
+        }
+    ],
+    "require": {
+        "phpmailer/phpmailer": "^6.10"
+    }
+}
