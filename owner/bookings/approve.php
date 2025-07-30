@@ -372,7 +372,7 @@ $deposit_amount = calculateDeposit($booking['price'], $booking['duration_months'
     <!-- Sidebar Navigation -->
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <h4 class="mb-0"><i class="fas fa-home"></i> <span>UniHomes</span></h4>
+            <h4 class="mb-0"><i class="fas fa-home"></i> <span>Landlord$</span></h4>
         </div>
         <div class="sidebar-menu">
             <a href="../dashboard.php">

@@ -1,0 +1,62 @@
+# Composer dependencies
+vendor/
+composer.phar
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+logs/*.log
+
+# Cache directories
+cache/
+tmp/
+temp/
+
+# Upload directories (keep structure but ignore content)
+uploads/*
+!uploads/.gitkeep
+assets/uploads/*
+!assets/uploads/.gitkeep
+admin/uploads/*
+!admin/uploads/.gitkeep
+owner/uploads/*
+!owner/uploads/.gitkeep
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# PHP specific
+*.php~
+.phpunit.result.cache
+
+# Node modules (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build directories
+build/
+dist/
