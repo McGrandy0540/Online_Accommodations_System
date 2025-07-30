@@ -2,9 +2,9 @@ name: 🚀 Deploy to joshtech.66ghz.com
 
 on:
   workflow_dispatch: # Uncomment below to deploy on push instead
-  # push:
-  #   branches:
-  #     - main
+  push:
+    branches:
+      - main
 
 jobs:
   deploy:
