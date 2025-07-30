@@ -1,74 +1,26 @@
-name: CI/CD Pipeline
+name: 🚀 Deploy to joshtech.66ghz.com
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch: # Uncomment below to deploy on push instead
+  # push:
+  #   branches:
+  #     - main
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        php-version: [8.0, 8.1, 8.2]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: ${{ matrix.php-version }}
-        extensions: mbstring, xml, ctype, iconv, intl, pdo, pdo_mysql, dom, filter, gd, iconv, json, mbstring, pdo
-        coverage: none
-        
-    - name: Validate composer.json and composer.lock
-      run: composer validate --strict
-      
-    - name: Cache Composer packages
-      id: composer-cache
-      uses: actions/cache@v3
-      with:
-        path: vendor
-        key: ${{ runner.os }}-php-${{ matrix.php-version }}-${{ hashFiles('**/composer.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-php-${{ matrix.php-version }}-
-          
-    - name: Install dependencies
-      run: composer install --prefer-dist --no-progress --no-suggest --no-dev --optimize-autoloader
-      
-    - name: Check PHP syntax
-      run: find . -name "*.php" -not -path "./vendor/*" -exec php -l {} \;
-      
-    - name: Run basic tests (if you have any)
-      run: |
-        # Add your test commands here
-        # For example: php -f test_email.php
-        echo "Tests would run here"
-
   deploy:
-    needs: test
+    name: 🎉 Deploy to joshtech.66ghz.com
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: 8.1
-        extensions: mbstring, xml, ctype, iconv, intl, pdo, pdo_mysql, dom, filter, gd, iconv, json, mbstring, pdo
-        
-    - name: Install dependencies
-      run: composer install --prefer-dist --no-progress --no-suggest --no-dev --optimize-autoloader
-      
-    - name: Deploy to production
-      run: |
-        # Add your deployment commands here
-        echo "Deployment would happen here"
-        # Example: rsync, FTP upload, etc.
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
+
+      - name: 📂 Sync files via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ftpupload.net # Change if using another host
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: joshtech.66ghz.com/htdocs/ # Replace with your correct path
+          retries: 3
+          retryDelay: 10
