@@ -21,6 +21,6 @@ jobs:
           server: ftpupload.net # Change if using another host
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: joshtech.66ghz.com/htdocs/ # Replace with your correct path
+          server-dir: /htdocs/ # Replace with your correct path
           retries: 3
           retryDelay: 10
