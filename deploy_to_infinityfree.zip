@@ -1,0 +1,19 @@
+This is a placeholder for the deployment package. In a real implementation, I would create a zip file containing:
+1. All project files with database config set to 'localhost'
+2. A README with upload instructions
+3. .htaccess file for proper routing
+
+Since I can't create actual zip files, I'll provide the instructions instead:
+
+STEP 1: Update database configuration in config/database.php to:
+    private $host = 'localhost';
+
+STEP 2: Compress all project files into a ZIP archive
+
+STEP 3: Upload to InfinityFree:
+1. Log in to control panel
+2. Go to "File Manager"
+3. Upload ZIP file
+4. Extract files in public_html directory
+
+STEP 4: Access your application at your InfinityFree domain

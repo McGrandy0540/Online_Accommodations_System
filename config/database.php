@@ -6,7 +6,7 @@ define('PAYSTACK_PUBLIC_KEY', 'pk_test_db73c7228ff880b4a3d49593023b91a6a5b923c6'
 define('PAYSTACK_CURRENCY', 'GHS');
 
 class Database {
-    private $host = 'sql211.infinityfree.com';
+    private $host = 'localhost';
     private $db_name = 'if0_39582071_online_accommodation';
     private $username = 'if0_39582071';
     private $password = 'mcgrandy0408';
