@@ -1,4 +1,4 @@
-name: 🚀 Deploy to joshtech.66ghz.com
+name: 🚀 Deploy to level-tech.wuaze.com
 
 on:
   workflow_dispatch: # Uncomment below to deploy on push instead
@@ -8,7 +8,7 @@ on:
 
 jobs:
   deploy:
-    name: 🎉 Deploy to joshtech.66ghz.com
+    name: 🎉 Deploy to level-tech.wuaze.com
     runs-on: ubuntu-latest
 
     steps:
@@ -28,9 +28,7 @@ jobs:
       - name: 📂 Sync files via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ftpupload.net # Change if using another FTP server
+          server: ftpupload.net
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: joshtech.66ghz.com/htdocs/ # Replace with your correct path
-          retries: 3
-          retryDelay: 10
+          server-dir: /htdocs/
