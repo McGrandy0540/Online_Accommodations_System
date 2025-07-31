@@ -3,7 +3,7 @@
 // Environment Settings
 // =====================
 define('ENVIRONMENT', 'development'); // 'production', 'staging', 'development'
-define('SITE_URL', 'https://yourdomain.com');
+define('SITE_URL', 'https://sv4.byethost4.org'); // MUST match actual domain for SSL certificate validation
 define('ADMIN_EMAIL', 'admin@yourdomain.com');
 define('SUPPORT_EMAIL', 'support@yourdomain.com');
 
