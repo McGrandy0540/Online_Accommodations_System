@@ -10,23 +10,19 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// Check if user is admin (assuming role is stored in session)
+// Check if user is admin
 if ($_SESSION['status'] !== 'admin') {
-    // If not admin, show access denied
     die("<h1>Access Denied</h1><p>You don't have permission to access this page.</p>");
 }
 
 // Database connection
 require_once '../config/database.php';
+require_once '../includes/EmailService.php'; // Include email service
+require_once  '../config/email.php';
 
-// Get the PDO instance from the Database class
+// Get the PDO instance
 $database = new Database();
 $pdo = $database->connect();
-
-// Get user data from session
-$username = $_SESSION['username'] ?? 'Admin';
-$email = $_SESSION['email'] ?? 'admin@example.com';
-$avatar = $_SESSION['avatar'] ?? 'https://randomuser.me/api/portraits/men/32.jpg';
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -37,48 +33,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $isUrgent = isset($_POST['is_urgent']) ? 1 : 0;
         
         try {
+            // Insert announcement
             $stmt = $pdo->prepare("
                 INSERT INTO announcements (sender_id, title, message, target_group, is_urgent)
                 VALUES (?, ?, ?, ?, ?)
             ");
             $stmt->execute([$_SESSION['user_id'], $title, $message, $targetGroup, $isUrgent]);
-            
             $announcementId = $pdo->lastInsertId();
             
-            // Determine recipients based on target group
+            // Determine recipients
             $recipients = [];
-            if ($targetGroup === 'all') {
-                $stmt = $pdo->query("SELECT id FROM users WHERE deleted = 0");
-                $recipients = $stmt->fetchAll(PDO::FETCH_COLUMN);
-            } elseif ($targetGroup === 'students') {
-                $stmt = $pdo->query("SELECT id FROM users WHERE status = 'student' AND deleted = 0");
-                $recipients = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            $recipientQuery = "SELECT id, email FROM users WHERE deleted = 0";
+            
+            if ($targetGroup === 'students') {
+                $recipientQuery .= " AND status = 'student'";
             } elseif ($targetGroup === 'property_owners') {
-                $stmt = $pdo->query("SELECT id FROM users WHERE status = 'property_owner' AND deleted = 0");
-                $recipients = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                $recipientQuery .= " AND status = 'property_owner'";
             }
             
-            // Insert recipients
+            $stmt = $pdo->query($recipientQuery);
+            $recipients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Insert recipients and send emails
             if (!empty($recipients)) {
                 $values = [];
                 $params = [];
-                foreach ($recipients as $userId) {
+                $emailService = new EmailService();
+                
+                foreach ($recipients as $user) {
+                    // Insert recipient
                     $values[] = '(?, ?)';
                     $params[] = $announcementId;
-                    $params[] = $userId;
+                    $params[] = $user['id'];
+                    
+                    // Send announcement email
+                    $emailSubject = $isUrgent ? "[URGENT] $title" : $title;
+                    $emailService->sendAnnouncement(
+                        $user['email'],
+                        $emailSubject,
+                        $message
+                    );
                 }
                 
+                // Batch insert recipients
                 $stmt = $pdo->prepare("
                     INSERT INTO announcement_recipients (announcement_id, user_id)
                     VALUES " . implode(', ', $values)
                 );
                 $stmt->execute($params);
             }
-            
-            $success = "Announcement created successfully!";
+        
+            $success = "Announcement created and notifications sent successfully!";
         } catch (PDOException $e) {
             error_log("Database Error: " . $e->getMessage());
             $error = "Failed to create announcement. Please try again.";
+        } catch (Exception $e) {
+            error_log("Email Error: " . $e->getMessage());
+            $error = "Announcement created but some emails failed to send.";
         }
     }
 }
@@ -89,12 +100,12 @@ try {
         SELECT a.*, u.username as sender_name
         FROM announcements a
         JOIN users u ON a.sender_id = u.id
-        ORDER BY a.created_at DESC
+        ORDER by a.created_at DESC
     ");
     $stmt->execute();
     $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Get recipient counts for each announcement
+    // Get recipient counts
     foreach ($announcements as &$announcement) {
         $stmt = $pdo->prepare("
             SELECT COUNT(*) as count 
@@ -111,39 +122,209 @@ try {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Announcements - UniHomes Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../assets/css/admin-dashboard.css">
     <style>
-        .announcement-container {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 30px;
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3a56d4;
+            --secondary: #2c3e50;
+            --danger: #f72585;
+            --success: #4cc9f0;
+            --warning: #f8961e;
+            --info: #4895ef;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --light-gray: #e9ecef;
+            --white: #ffffff;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
         
-        @media (min-width: 992px) {
-            .announcement-container {
-                grid-template-columns: 1fr 1fr;
-            }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            color: var(--dark);
+        }
+        
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .sidebar {
+            width: 250px;
+            background: var(--secondary);
+            color: white;
+            transition: all 0.3s;
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .sidebar-menu {
+            padding: 15px 0;
+        }
+        
+        .sidebar-menu ul {
+            list-style: none;
+        }
+        
+        .sidebar-menu li a {
+            display: block;
+            padding: 12px 20px;
+            color: white;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+        
+        .sidebar-menu li a:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .sidebar-menu li a.active {
+            background: var(--primary);
+        }
+        
+        .sidebar-menu li a i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .top-nav {
+            background: var(--white);
+            padding: 15px 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .menu-toggle {
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        .user-profile {
+            display: flex;
+            align-items: center;
+        }
+        
+        .user-profile img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .admin-badge {
+            background: var(--primary);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-left: 8px;
+        }
+        
+        .content-area {
+            padding: 25px;
+            flex: 1;
+        }
+        
+        .page-header {
+            margin-bottom: 25px;
+        }
+        
+        .page-title h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .breadcrumb {
+            list-style: none;
+            display: flex;
+            padding: 0;
+        }
+        
+        .breadcrumb li {
+            margin-right: 10px;
+        }
+        
+        .breadcrumb li:not(:last-child)::after {
+            content: '/';
+            margin-left: 10px;
+            color: var(--gray);
+        }
+        
+        .breadcrumb li a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: var(--border-radius);
+        }
+        
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .announcement-container {
+            display: flex;
+            gap: 25px;
         }
         
         .announcement-form {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 20px;
+            flex: 1;
+            background: var(--white);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 25px;
         }
         
-        .announcement-list {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 20px;
+        .announcement-form h2 {
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: var(--secondary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .announcement-form h2 i {
+            color: var(--primary);
         }
         
         .form-group {
@@ -154,19 +335,21 @@ try {
             display: block;
             margin-bottom: 8px;
             font-weight: 500;
+            color: var(--secondary);
         }
         
         .form-control {
             width: 100%;
-            padding: 10px 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 15px;
+            padding: 12px 15px;
+            border: 1px solid var(--light-gray);
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: border-color 0.3s;
         }
         
         .form-control:focus {
+            border-color: var(--primary);
             outline: none;
-            border-color: #4a6bff;
         }
         
         textarea.form-control {
@@ -175,27 +358,50 @@ try {
         }
         
         .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            font-size: 15px;
+            padding: 12px 25px;
+            border-radius: var(--border-radius);
             font-weight: 500;
             cursor: pointer;
             transition: all 0.3s;
+            border: none;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
         
         .btn-primary {
-            background-color: #4a6bff;
-            color: white;
+            background: var(--primary);
+            color: var(--white);
         }
         
         .btn-primary:hover {
-            background-color: #3a56e8;
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: var(--gray);
+            color: var(--white);
+        }
+        
+        .announcement-list {
+            flex: 1;
+            background: var(--white);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 25px;
+        }
+        
+        .announcement-list h2 {
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: var(--secondary);
         }
         
         .announcement-item {
-            padding: 15px;
-            border-bottom: 1px solid #eee;
+            padding: 20px;
+            border-bottom: 1px solid var(--light-gray);
         }
         
         .announcement-item:last-child {
@@ -205,114 +411,86 @@ try {
         .announcement-header {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
         }
         
         .announcement-title {
             font-weight: 600;
-            font-size: 18px;
-            color: #333;
+            font-size: 1.2rem;
+            color: var(--secondary);
         }
         
         .announcement-meta {
-            font-size: 13px;
-            color: #666;
+            display: flex;
+            gap: 15px;
+            color: var(--gray);
+            font-size: 0.9rem;
         }
         
-        .announcement-meta span {
-            margin-right: 10px;
-        }
-        
-        .announcement-meta .urgent {
-            color: #dc3545;
-            font-weight: 500;
+        .urgent {
+            background: var(--warning);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
         }
         
         .announcement-message {
-            margin-top: 10px;
-            color: #444;
+            margin-bottom: 15px;
+            line-height: 1.6;
         }
         
         .announcement-actions {
-            margin-top: 15px;
             display: flex;
             gap: 10px;
         }
         
-        .btn-sm {
-            padding: 5px 10px;
-            font-size: 13px;
-        }
-        
-        .btn-danger {
-            background-color: #dc3545;
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background-color: #c82333;
-        }
-        
         .btn-outline {
             background: transparent;
-            border: 1px solid #4a6bff;
-            color: #4a6bff;
+            border: 1px solid var(--primary);
+            color: var(--primary);
         }
         
-        .btn-outline:hover {
-            background-color: #4a6bff;
-            color: white;
-        }
-        
-        .alert {
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        
-        .alert-success {
-            background-color: rgba(40, 167, 69, 0.1);
-            border-left: 4px solid #28a745;
-            color: #28a745;
-        }
-        
-        .alert-danger {
-            background-color: rgba(220, 53, 69, 0.1);
-            border-left: 4px solid #dc3545;
-            color: #dc3545;
+        .btn-sm {
+            padding: 8px 15px;
+            font-size: 0.9rem;
         }
         
         .empty-state {
             text-align: center;
-            padding: 40px 20px;
-            color: #666;
+            padding: 40px 0;
+            color: var(--gray);
         }
         
         .empty-state i {
-            font-size: 50px;
+            font-size: 3rem;
             margin-bottom: 15px;
-            color: #ddd;
+            color: var(--light-gray);
         }
         
         .empty-state h3 {
+            font-size: 1.5rem;
             margin-bottom: 10px;
-            font-weight: 500;
         }
         
-        @media (max-width: 576px) {
-            .announcement-header {
+        @media (max-width: 992px) {
+            .announcement-container {
                 flex-direction: column;
             }
             
-            .announcement-meta {
-                margin-top: 5px;
+            .sidebar {
+                width: 70px;
+            }
+            
+            .sidebar .menu-text {
+                display: none;
             }
         }
     </style>
 </head>
 <body>
     <div class="dashboard-container">
-        <!-- Sidebar (same as in dashboard.php) -->
+        <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h2>UniHomes Admin</h2>
@@ -326,7 +504,6 @@ try {
                     <li><a href="../admin/reports/"><i class="fas fa-file-invoice-dollar"></i> Financial Reports</a></li>
                     <li><a href="../admin/approvals/"><i class="fas fa-calendar-alt"></i> Booking Approvals</a></li>
                     <li><a href="../admin/admins/"><i class="fas fa-user-shield"></i> Admin Users</a></li>
-                    <li><a href="../admin/settings/"><i class="fas fa-cog"></i> System Settings</a></li>
                     <li><a href="../admin/announcement.php" class="active"><i class="fa-solid fa-bullhorn"></i> Announcements</a></li>
                 </ul>
             </div>
@@ -334,14 +511,14 @@ try {
 
         <!-- Main Content -->
         <div class="main-content">
-            <!-- Top Navigation (same as in dashboard.php) -->
+            <!-- Top Navigation -->
             <div class="top-nav">
                 <div class="menu-toggle" id="menuToggle">
                     <i class="fas fa-bars"></i>
                 </div>
                 <div class="user-profile">
-                    <img src="<?php echo htmlspecialchars($avatar); ?>" alt="User Profile">
-                    <span><?php echo htmlspecialchars($username); ?> <span class="admin-badge">ADMIN</span></span>
+                    <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="User Profile">
+                    <span><?php echo htmlspecialchars($_SESSION['username'] ?? 'Admin'); ?> <span class="admin-badge">ADMIN</span></span>
                 </div>
             </div>
 

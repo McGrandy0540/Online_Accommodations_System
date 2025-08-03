@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Property | UniHomes Admin</title>
+    <title>Add Property | landlords&Tenant Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -446,13 +446,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="row">
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label><i class="fas fa-dollar-sign"></i> Price (per room) *</label>
+                                <label><i class="fas fa-dollar-sign"></i> Price per Student *</label>
                                 <div class="input-group">
                                     <div class="input-group-prepend">
                                         <span class="input-group-text">$</span>
                                     </div>
                                     <input type="number" name="price" step="0.01" min="0" class="form-control" required>
                                 </div>
+                                <small class="text-muted">Price charged per student per room</small>
                             </div>
                         </div>
                         <div class="col-md-4">

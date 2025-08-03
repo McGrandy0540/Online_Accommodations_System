@@ -368,8 +368,7 @@ if (isset($_GET['export'])) {
                     <li><a href="financial.php"><i class="fas fa-chart-line"></i> Financial Reports</a></li>
                     <li><a href="occupancy.php"><i class="fas fa-bed"></i> Occupancy Reports</a></li>
                     <li><a href="export.php" class="active"><i class="fas fa-file-export"></i> Data Exports</a></li>
-                    <li><a href="../settings/"><i class="fas fa-cog"></i> Settings</a></li>
-                    <li><a href="../auth/logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+
                 </ul>
             </div>
         </div>

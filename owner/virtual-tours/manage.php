@@ -27,15 +27,38 @@ if (!$owner) {
 }
 
 // Get all virtual tours with property info
-$tours_stmt = $pdo->prepare("SELECT pi.*, p.property_name, p.location, 
-                            (SELECT COUNT(*) FROM availability_calendar ac WHERE ac.property_id = p.id AND ac.status = 'booked' AND ac.date >= CURDATE()) as scheduled_viewings,
-                            (SELECT COUNT(*) FROM reviews r WHERE r.property_id = p.id) as review_count
-                            FROM property_images pi
-                            JOIN property p ON pi.property_id = p.id
-                            JOIN property_owners po ON p.id = po.property_id
-                            WHERE po.owner_id = ? AND pi.is_virtual_tour = 1
-                            ORDER BY pi.created_at DESC");
-$tours_stmt->execute([$owner_id]);
+// Get all virtual tours and room videos with property info
+$tours_stmt = $pdo->prepare("
+    (SELECT
+        pi.id,
+        p.property_name,
+        p.location,
+        pi.image_url AS media_url,
+        pi.created_at,
+        (SELECT COUNT(*) FROM availability_calendar ac WHERE ac.property_id = p.id AND ac.status = 'booked' AND ac.date >= CURDATE()) as scheduled_viewings,
+        (SELECT COUNT(*) FROM reviews r WHERE r.property_id = p.id) as review_count,
+        'tour' AS type
+    FROM property_images pi
+    JOIN property p ON pi.property_id = p.id
+    JOIN property_owners po ON p.id = po.property_id
+    WHERE po.owner_id = ? AND pi.is_virtual_tour = 1)
+    UNION ALL
+    (SELECT
+        rv.id,
+        p.property_name,
+        p.location,
+        rv.video_path AS media_url,
+        NULL AS created_at,  -- Room videos don't have created_at column
+        (SELECT COUNT(*) FROM availability_calendar ac WHERE ac.property_id = p.id AND ac.status = 'booked' AND ac.date >= CURDATE()) as scheduled_viewings,
+        (SELECT COUNT(*) FROM reviews r WHERE r.property_id = p.id) as review_count,
+        'room' AS type
+    FROM room_videos rv
+    JOIN property p ON rv.property_id = p.id
+    JOIN property_owners po ON p.id = po.property_id
+    WHERE po.owner_id = ?)
+    ORDER BY CASE WHEN type = 'tour' THEN created_at END DESC
+");
+$tours_stmt->execute([$owner_id, $owner_id]);
 $virtual_tours = $tours_stmt->fetchAll();
 
 // Get profile picture path
@@ -720,8 +743,8 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     <header class="main-header">
         <div class="header-container">
             <a href="../../" class="logo">
-                <img src="../../assets/images/ktu logo.png" alt="UniHomes Logo">
-                <span>Landlords&Tenant</span>
+                <img src="../../assets/images/ktu logo.png" alt="landlords&tenants Logo">
+                <span>Landlords&Tenants</span>
             </a>
             
             <div class="user-controls">
@@ -814,17 +837,17 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                                 <?php foreach ($virtual_tours as $tour): ?>
                                 <tr>
                                     <td>
-                                        <?php if (strpos($tour['image_url'], '.mp4') !== false || strpos($tour['image_url'], '.webm') !== false || strpos($tour['image_url'], '.mov') !== false): ?>
-                                            <video src="../../<?= htmlspecialchars($tour['image_url']) ?>" class="media-preview" style="object-fit: cover;"></video>
+                                        <?php if ($tour['type'] === 'room' || strpos($tour['media_url'], '.mp4') !== false || strpos($tour['media_url'], '.webm') !== false || strpos($tour['media_url'], '.mov') !== false): ?>
+                                            <video src="../../<?= htmlspecialchars($tour['media_url']) ?>" class="media-preview" style="object-fit: cover;"></video>
                                         <?php else: ?>
-                                            <img src="../../<?= htmlspecialchars($tour['image_url']) ?>" class="media-preview" alt="Tour Preview">
+                                            <img src="../../<?= htmlspecialchars($tour['media_url']) ?>" class="media-preview" alt="Tour Preview">
                                         <?php endif; ?>
                                     </td>
                                     <td><?= htmlspecialchars($tour['property_name']) ?></td>
                                     <td><?= htmlspecialchars($tour['location']) ?></td>
                                     <td>
-                                        <span class="badge <?= strpos($tour['image_url'], '.mp4') !== false || strpos($tour['image_url'], '.webm') !== false || strpos($tour['image_url'], '.mov') !== false ? 'badge-primary' : 'badge-success' ?>">
-                                            <?= strpos($tour['image_url'], '.mp4') !== false || strpos($tour['image_url'], '.webm') !== false || strpos($tour['image_url'], '.mov') !== false ? 'Video' : 'Image' ?>
+                                        <span class="badge <?= ($tour['type'] === 'room' || strpos($tour['media_url'], '.mp4') !== false || strpos($tour['media_url'], '.webm') !== false || strpos($tour['media_url'], '.mov') !== false) ? 'badge-primary' : 'badge-success' ?>">
+                                            <?= ($tour['type'] === 'room' || strpos($tour['media_url'], '.mp4') !== false || strpos($tour['media_url'], '.webm') !== false || strpos($tour['media_url'], '.mov') !== false) ? 'Video' : 'Image' ?>
                                         </span>
                                     </td>
                                     <td><?= date('M j, Y', strtotime($tour['created_at'])) ?></td>
@@ -838,7 +861,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                                             <a href="../../<?= htmlspecialchars($tour['image_url']) ?>" class="btn btn-outline btn-sm" target="_blank">
                                                 <i class="fas fa-eye"></i> View
                                             </a>
-                                            <button class="btn btn-outline btn-sm delete-btn" data-id="<?= $tour['id'] ?>">
+                                            <button class="btn btn-outline btn-sm delete-btn" data-id="<?= $tour['id'] ?>" data-type="<?= $tour['type'] ?>">
                                                 <i class="fas fa-trash"></i> Delete
                                             </button>
                                         </div>
@@ -911,6 +934,92 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                     </div>
                 </div>
             </div>
+            
+            <!-- Room Videos Section -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-door-open me-2"></i>Room Videos</h5>
+                </div>
+                <div class="card-body">
+                    <form id="roomVideoForm" class="mb-4">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Property</label>
+                                <select class="form-select" id="property_id" name="property_id" required>
+                                    <?php
+                                    $properties_stmt = $pdo->prepare("SELECT p.id, p.property_name
+                                                                    FROM property p
+                                                                    JOIN property_owners po ON p.id = po.property_id
+                                                                    WHERE po.owner_id = ?");
+                                    $properties_stmt->execute([$owner_id]);
+                                    $properties = $properties_stmt->fetchAll();
+                                    
+                                    if (count($properties) > 0) {
+                                        foreach ($properties as $property): ?>
+                                            <option value="<?= $property['id'] ?>"><?= htmlspecialchars($property['property_name']) ?></option>
+                                        <?php endforeach;
+                                    } else {
+                                        echo '<option value="">No properties found</option>';
+                                    }
+                                    ?>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Room Name</label>
+                                <input type="text" class="form-control" name="room_name" placeholder="Bedroom, Kitchen, etc." required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Video File</label>
+                                <input type="file" class="form-control" name="video" accept="video/*" required>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-upload me-2"></i>Upload Room Video
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Property</th>
+                                    <th>Room</th>
+                                    <th>Video</th>
+                                    <th>Uploaded</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php
+                                $room_videos_stmt = $pdo->prepare("SELECT rv.*, p.property_name
+                                                                FROM room_videos rv
+                                                                JOIN property p ON rv.property_id = p.id
+                                                                WHERE p.id IN (SELECT property_id FROM property_owners WHERE owner_id = ?)");
+                                $room_videos_stmt->execute([$owner_id]);
+                                $room_videos = $room_videos_stmt->fetchAll();
+                                
+                                foreach ($room_videos as $video): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($video['property_name']) ?></td>
+                                    <td><?= htmlspecialchars($video['room_name']) ?></td>
+                                    <td>
+                                        <video src="../../<?= htmlspecialchars($video['video_path']) ?>" class="media-preview" style="object-fit: cover;"></video>
+                                    </td>
+                                    <td><?= date('M j, Y', strtotime($video['created_at'])) ?></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-danger delete-btn" data-id="<?= $video['id'] ?>" data-type="room">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -918,8 +1027,8 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     <footer class="main-footer">
         <div class="footer-container">
             <div class="footer-column">
-                <h3>About UniHomes</h3>
-                <p>Providing quality student accommodation with modern amenities and secure living spaces.</p>
+                <h3>About landlords&tenants</h3>
+                <p>Providing quality accommodation with modern amenities and secure living spaces.</p>
             </div>
             
             <div class="footer-column">
@@ -947,7 +1056,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                 <ul>
                     <li><i class="fas fa-map-marker-alt me-2"></i> 123 Campus Drive, University Town</li>
                     <li><i class="fas fa-phone me-2"></i> +233 240687599</li>
-                    <li><i class="fas fa-envelope me-2"></i> owners@unihomes.com</li>
+                    <li><i class="fas fa-envelope me-2"></i> owners@landlords&tenants.com</li>
                 </ul>
                 <div class="social-links">
                     <a href="#"><i class="fab fa-facebook-f"></i></a>
@@ -958,7 +1067,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             </div>
             
             <div class="copyright">
-                &copy; <?= date('Y') ?> UniHomes. All rights reserved.
+                &copy; <?= date('Y') ?> landlords&tenants. All rights reserved.
             </div>
         </div>
     </footer>
@@ -1040,13 +1149,14 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
         document.querySelectorAll('.delete-btn').forEach(button => {
             button.addEventListener('click', function() {
                 currentTourId = this.getAttribute('data-id');
+                currentTourType = this.getAttribute('data-type');
                 deleteModal.show();
             });
         });
 
         // Confirm delete
         document.getElementById('confirmDelete').addEventListener('click', function() {
-            fetch(`api/delete.php?id=${currentTourId}`, {
+            fetch(`api/delete.php?id=${currentTourId}&type=${currentTourType}`, {
                 method: 'DELETE'
             })
             .then(response => response.json())

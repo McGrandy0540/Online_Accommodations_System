@@ -242,7 +242,7 @@ if (isset($_GET['export'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payments Management - Hostel Admin</title>
+    <title>Payments Management - Landlords&Tenant Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -699,7 +699,7 @@ if (isset($_GET['export'])) {
         <!-- Sidebar -->
         <div id="sidebar">
             <div class="sidebar-header">
-                <h3>Hostel Admin</h3>
+                <h3>Landlords&Tenant Admin</h3>
             </div>
             <div class="sidebar-menu">
                 <ul>
@@ -710,8 +710,7 @@ if (isset($_GET['export'])) {
                     <li><a href="levy_payment.php" class="active"><i class="fas fa-money-bill-wave"></i>levy Payments</a></li>
                     <li><a href="../users/index.php"><i class="fas fa-users"></i> Users</a></li>
                     <li><a href="../reports/index.php"><i class="fas fa-chart-bar"></i> Reports</a></li>
-                    <li><a href="../settings/index.php"><i class="fas fa-cog"></i> Settings</a></li>
-                    <li><a href="../../../auth/logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                   
                 </ul>
             </div>
         </div>

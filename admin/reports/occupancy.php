@@ -32,21 +32,39 @@ $occupancyData = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get property occupancy rates
 $stmt = $pdo->prepare("
-    SELECT 
+    SELECT
         p.id,
         p.property_name,
         COUNT(b.id) AS booking_count,
         SUM(DATEDIFF(b.end_date, b.start_date)) AS occupied_nights,
-        (SELECT DATEDIFF(MAX(end_date), MIN(start_date)) FROM bookings WHERE YEAR(start_date) = :year) AS total_days,
-        ROUND((SUM(DATEDIFF(b.end_date, b.start_date)) / 
-             (SELECT DATEDIFF(MAX(end_date), MIN(start_date)) FROM bookings WHERE YEAR(start_date) = :year) * 100), 2) AS occupancy_rate
+        COUNT(DISTINCT pr.id) * :days_in_year AS total_possible_nights,
+        ROUND(
+            (SUM(DATEDIFF(b.end_date, b.start_date)) /
+            (COUNT(DISTINCT pr.id) * :days_in_year)) * 100,
+            2
+        ) AS occupancy_rate
     FROM property p
+    LEFT JOIN property_rooms pr ON p.id = pr.property_id
     LEFT JOIN bookings b ON p.id = b.property_id AND YEAR(b.start_date) = :year
     GROUP BY p.id, p.property_name
     ORDER BY occupancy_rate DESC
 ");
-$stmt->execute([':year' => $year]);
+// Calculate days in year (accounting for leap years)
+$isLeapYear = (($year % 4 == 0) && ($year % 100 != 0)) || ($year % 400 == 0);
+$days_in_year = $isLeapYear ? 366 : 365;
+
+$stmt->execute([
+    ':year' => $year,
+    ':days_in_year' => $days_in_year
+]);
 $propertyOccupancy = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Handle division by zero cases
+foreach ($propertyOccupancy as &$row) {
+    if ($row['total_possible_nights'] == 0) {
+        $row['occupancy_rate'] = 0;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -54,7 +72,7 @@ $propertyOccupancy = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Occupancy Reports - Hostel Admin</title>
+    <title>Occupancy Reports - LandlordsTenant Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>

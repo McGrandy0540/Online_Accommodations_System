@@ -97,7 +97,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Find Accommodation | UniHomes</title>
+    <title>Find Accommodation | Landlords&Tenant</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
@@ -844,7 +844,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                 <!-- Price Range -->
                 <div class="filter-section">
                     <div class="filter-title" data-bs-toggle="collapse" data-bs-target="#priceFilter">
-                        <span>Price Range (Per Student)</span>
+                        <span>Price Range (Per Tenant)</span>
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div id="priceFilter" class="filter-content collapse show">
@@ -1121,7 +1121,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                                             <?php endif; ?>
                                             <div class="property-price">
                                                 GHS <?= number_format($property['per_person_price'], 2) ?> 
-                                                <span>/year (per student)</span>
+                                                <span>/year (per Tenant)</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1344,7 +1344,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                         .addTo(map)
                         .bindPopup(`
                             <b><?= addslashes($property['property_name']) ?></b><br>
-                            GHS <?= number_format($property['per_person_price'], 2) ?>/year (per student)<br>
+                            GHS <?= number_format($property['per_person_price'], 2) ?>/year (per Tenant)<br>
                             <i class="fas fa-check-circle text-success"></i> Levy Paid<br>
                             <a href="details.php?id=<?= $property['id'] ?>" target="_blank">View Details</a>
                         `);

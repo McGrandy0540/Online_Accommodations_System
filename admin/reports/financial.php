@@ -14,7 +14,7 @@ $startDate = $_GET['start_date'] ?? date('Y-m-01');
 $endDate = $_GET['end_date'] ?? date('Y-m-t');
 
 $stmt = $pdo->prepare("
-    SELECT 
+    SELECT
         DATE_FORMAT(p.created_at, '%Y-%m') AS month,
         COUNT(*) AS payment_count,
         SUM(p.amount) AS total_amount,
@@ -23,7 +23,7 @@ $stmt = $pdo->prepare("
         SUM(CASE WHEN p.status = 'failed' THEN p.amount ELSE 0 END) AS failed_amount
     FROM payments p
     WHERE p.created_at BETWEEN :start_date AND :end_date
-    GROUP BY DATE_FORMAT(p.created_at, '%Y-%m')
+    GROUP BY month
     ORDER BY month
 ");
 $stmt->execute([':start_date' => $startDate . ' 00:00:00', ':end_date' => $endDate . ' 23:59:59']);
@@ -411,13 +411,10 @@ foreach ($financialData as $row) {
                     <li><a href="../dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
                     <li><a href="../users/"><i class="fas fa-users"></i> User Management</a></li>
                     <li><a href="../properties/"><i class="fas fa-home"></i> Property Management</a></li>
-                    <li><a href="../bookings/"><i class="fas fa-calendar-check"></i> Booking Management</a></li>
                     <li><a href="../payments/"><i class="fas fa-money-bill-wave"></i> Payments</a></li>
                     <li><a href="financial.php" class="active"><i class="fas fa-chart-line"></i> Financial Reports</a></li>
                     <li><a href="occupancy.php"><i class="fas fa-bed"></i> Occupancy Reports</a></li>
                     <li><a href="export.php"><i class="fas fa-file-export"></i> Data Exports</a></li>
-                    <li><a href="../settings/"><i class="fas fa-cog"></i> Settings</a></li>
-                    <li><a href="../auth/logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
                 </ul>
             </div>
         </div>

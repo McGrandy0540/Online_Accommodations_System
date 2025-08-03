@@ -92,12 +92,32 @@ $page_title = "Property Management";
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($page_title); ?> | UniHomes Admin</title>
+    <title><?php echo htmlspecialchars($page_title); ?> | Landlords&Tenant Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-material-ui/material-ui.css" rel="stylesheet">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
     <style>
         :root {
+            --primary-color: #3498db;
+            --primary-hover: #2980b9;
+            --secondary-color: #2c3e50;
+            --accent-color: #e74c3c;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --danger-color: #dc3545;
+            --sidebar-width: 250px;
+            --sidebar-collapsed-width: 80px;
+            --header-height: 60px;
+            --transition-speed: 0.3s;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
             --primary: #4361ee;
             --primary-dark: #3a56d4;
             --secondary: #2c3e50;
@@ -110,10 +130,41 @@ $page_title = "Property Management";
             --gray: #6c757d;
             --light-gray: #e9ecef;
             --white: #ffffff;
-            --sidebar-width: 280px;
-            --sidebar-collapsed-width: 80px;
             --top-nav-height: 70px;
-            --transition-speed: 0.3s;
+        }
+        
+        /* Carousel-specific styles */
+        .carousel-container {
+            height: 200px;
+            overflow: hidden;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+        
+        .carousel-item img {
+            height: 200px;
+            object-fit: cover;
+            width: 100%;
+        }
+        
+        .carousel-control-prev, .carousel-control-next {
+            background-color: rgba(0, 0, 0, 0.3);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        .carousel-indicators {
+            bottom: 10px;
+        }
+        
+        .carousel-indicators button {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin: 0 5px;
         }
         
         * {
@@ -432,6 +483,20 @@ $page_title = "Property Management";
             width: 20px;
             text-align: center;
         }
+
+
+         .carousel-item img {
+            height: 180px;
+            object-fit: cover;
+            width: 100%;
+        }
+        
+        .carousel-indicators button {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin: 0 5px;
+        }
         
         /* Card Styles */
         .card {
@@ -724,10 +789,125 @@ $page_title = "Property Management";
             cursor: not-allowed;
         }
         
+        /* Property Grid */
+        .property-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        
+        .property-card {
+            background: var(--white);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .property-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        .property-image {
+            height: 200px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--light-gray);
+        }
+        
+        .property-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s ease;
+        }
+        
+        .property-card:hover .property-image img {
+            transform: scale(1.05);
+        }
+        
+        .no-image {
+            padding: 20px;
+            color: var(--gray);
+            text-align: center;
+        }
+        
+        .property-details {
+            padding: 20px;
+        }
+        
+        .property-details h3 {
+            margin-bottom: 10px;
+            color: var(--secondary);
+        }
+        
+        .property-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        
+        .category {
+            background: var(--light);
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+        
+        .property-price {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+        
+        .property-price small {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: normal;
+            color: var(--gray);
+        }
+        
+        .property-info {
+            margin-bottom: 20px;
+        }
+        
+        .property-info p {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: flex-start;
+        }
+        
+        .property-info i {
+            margin-right: 10px;
+            color: var(--primary);
+            min-width: 20px;
+        }
+        
+        .property-actions {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        
+        .property-actions .btn {
+            padding: 8px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        
         /* Empty State */
         .empty-state {
             text-align: center;
             padding: 40px 20px;
+            grid-column: 1 / -1;
         }
         
         .empty-state i {
@@ -885,7 +1065,7 @@ $page_title = "Property Management";
             <div class="sidebar-brand">
                 <div class="d-flex align-items-center">
                     <i class="fas fa-home"></i>
-                    <h2>UniHomes</h2>
+                    <h2>Landlords&Tenant</h2>
                 </div>
                 <button class="toggle-btn" id="sidebarToggle">
                     <i class="fas fa-chevron-left"></i>
@@ -923,12 +1103,7 @@ $page_title = "Property Management";
                             <span>Approvals</span>
                         </a>
                     </li>
-                    <li>
-                        <a href="../settings/general.php" class="<?php echo strpos($_SERVER['REQUEST_URI'], 'settings') !== false ? 'active' : ''; ?>">
-                            <i class="fas fa-cog"></i>
-                            <span>Settings</span>
-                        </a>
-                    </li>
+                    
                 </ul>
             </nav>
             <div class="sidebar-footer">
@@ -960,11 +1135,11 @@ $page_title = "Property Management";
             <div class="nav-right">
                 <div class="notification-btn">
                     <i class="fas fa-bell"></i>
-                    <span class="notification-badge">3</span>
+                    <span class="notification-badge"></span>
                 </div>
                 <div class="user-profile-btn" id="userProfileBtn">
                     <div class="user-profile">
-                        <img src="../../../assets/images/profiles/<?php echo htmlspecialchars($_SESSION['profile_pic'] ?? 'default.jpg'); ?>" class="user-avatar" alt="User Avatar">
+                        <img src="../profiles/<?php echo htmlspecialchars($_SESSION['profile_pic'] ?? 'default.jpg'); ?>" class="user-avatar" alt="User Avatar">
                         <span class="user-name"><?php echo htmlspecialchars($_SESSION['name'] ?? 'Admin'); ?></span>
                         <i class="fas fa-chevron-down"></i>
                     </div>
@@ -975,9 +1150,7 @@ $page_title = "Property Management";
                         <a href="../settings/notifications.php">
                             <i class="fas fa-cog"></i> Settings
                         </a>
-                        <a href="../../auth/logout.php">
-                            <i class="fas fa-sign-out-alt"></i> Logout
-                        </a>
+                      
                     </div>
                 </div>
             </div>
@@ -1042,48 +1215,86 @@ $page_title = "Property Management";
                                         <th class="text-right">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    <?php foreach ($properties as $property): ?>
-                                    <tr class="fade-in">
-                                        <td><?php echo htmlspecialchars($property['id']); ?></td>
-                                        <td>
-                                            <?php 
-                                            // Get first image for the property
-                                            $imgStmt = $db->prepare("SELECT image_url FROM property_images WHERE property_id = ? LIMIT 1");
-                                            $imgStmt->execute([$property['id']]);
-                                            $image = $imgStmt->fetch(PDO::FETCH_ASSOC);
-                                            if ($image): ?>
-                                                <img src="../../../<?php echo htmlspecialchars($image['image_url']); ?>" class="property-image-thumb" alt="Property Image">
-                                            <?php else: ?>
-                                                <div class="no-image">No Image</div>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td><?php echo htmlspecialchars($property['property_name']); ?></td>
-                                        <td><?php echo htmlspecialchars($property['category_name']); ?></td>
-                                        <td>$<?php echo number_format($property['price'], 2); ?></td>
-                                        <td><?php echo htmlspecialchars($property['location']); ?></td>
-                                        <td>
-                                            <span class="status <?php echo strtolower($property['status']); ?>">
-                                                <?php echo ucfirst($property['status']); ?>
-                                            </span>
-                                        </td>
-                                        <td><?php echo htmlspecialchars($property['owner_name']); ?></td>
-                                        <td class="text-right">
-                                            <div class="d-flex justify-content-end gap-2">
-                                                <a href="view.php?id=<?php echo $property['id']; ?>" class="btn btn-sm btn-info" title="View">
-                                                    <i class="fas fa-eye"></i>
-                                                </a>
-                                                <a href="edit.php?id=<?php echo $property['id']; ?>" class="btn btn-sm btn-primary" title="Edit">
-                                                    <i class="fas fa-edit"></i>
-                                                </a>
-                                                <button onclick="confirmDelete(<?php echo $property['id']; ?>)" class="btn btn-sm btn-danger" title="Delete">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
+                        <div class="property-grid">
+                            <?php foreach ($properties as $property): ?>
+                            <div class="property-card fade-in">
+                                <!-- Property Images Carousel -->
+                                <?php
+                                $image_query = "SELECT image_url FROM property_images WHERE property_id = ?";
+                                $image_stmt = $db->prepare($image_query);
+                                $image_stmt->execute([$property['id']]);
+                                $images = $image_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                ?>
+                                
+                            <div class="carousel-container" >
+                                <!-- Carousel Container -->
+                                 <div id="carousel-<?= $property['id'] ?>" class="carousel slide">
+                                                        <div class="carousel-inner">
+                                                            <?php if (!empty($images)): ?>
+                                                                <?php foreach ($images as $index => $image): ?>
+                                                                    <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
+                                                                        <img src="../../uploads/<?= htmlspecialchars($image['image_url']) ?>" 
+                                                                             class="d-block w-100 property-img" 
+                                                                             alt="Property image">
+                                                                    </div>
+                                                                <?php endforeach; ?>
+                                                            <?php else: ?>
+                                                                <div class="carousel-item active">
+                                                                    <img src="../../assets/images/default-property.jpg" 
+                                                                         class="d-block w-100 property-img" 
+                                                                         alt="Default property image">
+                                                                </div>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <?php if (count($images) > 1): ?>
+                                                            <button class="carousel-control-prev" type="button" 
+                                                                    data-bs-target="#carousel-<?= $property['id'] ?>" 
+                                                                    data-bs-slide="prev">
+                                                                <span class="carousel-control-prev-icon"></span>
+                                                            </button>
+                                                            <button class="carousel-control-next" type="button" 
+                                                                    data-bs-target="#carousel-<?= $property['id'] ?>" 
+                                                                    data-bs-slide="next">
+                                                                <span class="carousel-control-next-icon"></span>
+                                                            </button>
+                                                        <?php endif; ?>
+                                                    </div>
+                                </div>
+                                <div class="property-details">
+                                    <h3><?php echo htmlspecialchars($property['property_name']); ?></h3>
+                                    <div class="property-meta">
+                                        <span class="category"><?php echo htmlspecialchars($property['category_name']); ?></span>
+                                        <span class="status <?php echo strtolower($property['status']); ?>">
+                                            <?php echo ucfirst($property['status']); ?>
+                                        </span>
+                                    </div>
+                                    <div class="property-price">
+                                        GHS<?php echo number_format($property['price'], 2); ?>
+                                        <small>Per student per room</small>
+                                    </div>
+                                    <div class="property-info">
+                                        <p><i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($property['location']); ?></p>
+                                        <p><i class="fas fa-door-open"></i> <?php echo $property['num_rooms']; ?> rooms (<?php echo $property['capacity']; ?> students/room)</p>
+                                        <?php if ($property['status'] === 'booked'): ?>
+                                            <p><i class="fas fa-bed"></i> <?php echo $property['occupied_rooms']; ?> rooms occupied</p>
+                                        <?php endif; ?>
+                                        <p><i class="fas fa-user"></i> Owner: <?php echo htmlspecialchars($property['owner_name']); ?></p>
+                                    </div>
+                                    <div class="property-actions">
+                                        <a href="view.php?id=<?php echo $property['id']; ?>" class="btn btn-info">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                        <a href="edits.php?id=<?php echo $property['id']; ?>" class="btn btn-primary">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <button onclick="confirmDelete(<?php echo $property['id']; ?>)" class="btn btn-danger">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
                             </table>
                         </div>
                         
@@ -1144,62 +1355,98 @@ $page_title = "Property Management";
             </div>
         </div>
     </div>
+<!-- Add Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
-        // Toggle sidebar
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-        const body = document.body;
-        
-        sidebarToggle.addEventListener('click', function() {
-            body.classList.toggle('sidebar-collapsed');
-            // Save state to cookie
-            document.cookie = `sidebarCollapsed=${body.classList.contains('sidebar-collapsed')}; path=/; max-age=${60*60*24*30}`;
+<script>
+    // Toggle sidebar
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const body = document.body;
+    
+    sidebarToggle.addEventListener('click', function() {
+        body.classList.toggle('sidebar-collapsed');
+        // Save state to cookie
+        document.cookie = `sidebarCollapsed=${body.classList.contains('sidebar-collapsed')}; path=/; max-age=${60*60*24*30}`;
+    });
+    
+    mobileMenuBtn.addEventListener('click', function() {
+        document.querySelector('.sidebar').classList.toggle('show');
+    });
+    
+    // User dropdown
+    const userProfileBtn = document.getElementById('userProfileBtn');
+    const userDropdown = document.getElementById('userDropdown');
+    
+    userProfileBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        userDropdown.classList.toggle('show');
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function() {
+        userDropdown.classList.remove('show');
+    });
+    
+    // Confirm delete
+    function confirmDelete(id) {
+        Swal.fire({
+            title: 'Are you sure?',
+            text: "You won't be able to revert this!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#4361ee',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.location.href = 'delete.php?id=' + id;
+            }
         });
-        
-        mobileMenuBtn.addEventListener('click', function() {
-            document.querySelector('.sidebar').classList.toggle('show');
-        });
-        
-        // User dropdown
-        const userProfileBtn = document.getElementById('userProfileBtn');
-        const userDropdown = document.getElementById('userDropdown');
-        
-        userProfileBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            userDropdown.classList.toggle('show');
-        });
-        
-        // Close dropdown when clicking outside
-        document.addEventListener('click', function() {
-            userDropdown.classList.remove('show');
-        });
-        
-        // Confirm delete
-        function confirmDelete(id) {
-            Swal.fire({
-                title: 'Are you sure?',
-                text: "You won't be able to revert this!",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#4361ee',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Yes, delete it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = 'delete.php?id=' + id;
-                }
-            });
-        }
-        
-        // Check for sidebar state on page load
-        document.addEventListener('DOMContentLoaded', function() {
+    }
+    
+    // Initialize carousels
+   document.addEventListener('DOMContentLoaded', function() {
             const sidebarState = document.cookie.split('; ').find(row => row.startsWith('sidebarCollapsed='));
             if (sidebarState && sidebarState.split('=')[1] === 'true') {
                 body.classList.add('sidebar-collapsed');
             }
+            
+            // // Initialize carousels with 5-second interval
+            // var carousels = document.querySelectorAll('.carousel');
+            // carousels.forEach(function(carousel) {
+            //     new bootstrap.Carousel(carousel, {
+            //         interval: 5000,
+            //         ride: 'carousel'
+            //     });
+            // });
+    });
+
+
+
+
+            
+        
+        // Initialize carousels
+        document.addEventListener('DOMContentLoaded', function() {
+            var carousels = document.querySelectorAll('.carousel');
+            carousels.forEach(function(carousel) {
+                new bootstrap.Carousel(carousel, {
+                    interval: 5000,
+                    ride: 'carousel'
+                });
+            });
         });
-    </script>
+
+
+        
+
+
+
+    
+</script>
 </body>
 </html>
+
+
+

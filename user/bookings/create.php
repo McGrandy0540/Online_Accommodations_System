@@ -614,7 +614,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="property-content">
                     <div class="property-price">
                         GHS <?= number_format($property['price'], 2) ?> 
-                        <span class="text-muted" style="font-size: 1rem;">/year (per student)</span>
+                        <span class="text-muted" style="font-size: 1rem;">/year (per tenant)</span>
                     </div>
                     
                     <h3 class="property-title">
@@ -679,7 +679,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         
                         <div class="d-flex justify-content-between mt-2">
                             <div class="fw-medium">
-                                Capacity: <?= $room['capacity'] ?> students
+                                Capacity: <?= $room['capacity'] ?> tenants
                             </div>
                             <div class="fw-medium text-success">
                                 Spots Available: <?= $room['capacity'] - $room['current_occupancy'] ?>

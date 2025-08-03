@@ -1,6 +1,0 @@
-[20-Jul-2025 18:47:48 Europe/Berlin] PHP Fatal error:  Uncaught Error: Class "PHPMailer\PHPMailer\PHPMailer" not found in C:\xampp\htdocs\projects\Online_Accommodation_System\config\email.php:136
-Stack trace:
-#0 C:\xampp\htdocs\projects\Online_Accommodation_System\config\email.php(233): EmailHelper::testSmtpConnection()
-#1 C:\xampp\htdocs\projects\Online_Accommodation_System\index.php(17): require_once('C:\\xampp\\htdocs...')
-#2 {main}
-  thrown in C:\xampp\htdocs\projects\Online_Accommodation_System\config\email.php on line 136

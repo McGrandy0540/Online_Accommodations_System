@@ -96,7 +96,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - UniHomes</title>
+    <title>Admin Dashboard - Landlords&Tenant</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/admin-dashboard.css">
@@ -251,8 +251,8 @@ try {
     <header class="main-header">
         <div class="header-content">
             <a href="../" class="logo">
-                <img src="../assets/images/ktu logo.png" alt="UniHomes Logo">
-                <span>UniHomes</span>
+                <img src="../assets/images/logo-removebg-preview.png" alt="UniHomes Logo">
+                <span>Landlords&Tenant</span>
             </a>
             
             <nav class="main-nav">
@@ -284,7 +284,7 @@ try {
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h2>UniHomes Admin</h2>
+                <h2>Landlords&Tenant Admin</h2>
             </div>
             <div class="sidebar-menu">
                 <ul>
@@ -294,7 +294,6 @@ try {
                     <li><a href="payments/"><i class="fas fa-wallet"></i> Payment Management</a></li>
                     <li><a href="reports/"><i class="fas fa-file-invoice-dollar"></i> Financial Reports</a></li>
                     <li><a href="approvals/"><i class="fas fa-calendar-alt"></i> Booking Approvals</a></li>
-            
                     <li><a href="announcement.php"><i class="fa-solid fa-bullhorn"></i></i> Announcement </a></li>
 <li>
    <form action="logout.php" method="POST">
@@ -484,10 +483,7 @@ try {
                                     <i class="fas fa-user-cog"></i>
                                     <div>User Management</div>
                                 </a>
-                                <a href="backup/" class="tool-btn bg-danger">
-                                    <i class="fas fa-database"></i>
-                                    <div>Database Backup</div>
-                                </a>
+                        
                                 <a href="exports/" class="tool-btn bg-success">
                                     <i class="fas fa-file-export"></i>
                                     <div>Export Data</div>
@@ -508,8 +504,8 @@ try {
     <footer class="main-footer">
         <div class="footer-content">
             <div class="footer-column">
-                <h3>About UniHomes</h3>
-                <p>Providing quality accommodation solutions for students since 2010. Our mission is to make student living comfortable and affordable.</p>
+                <h3>About Landlords&Tenants</h3>
+                <p>Providing quality accommodation solutions for Tenants since 2010. Our mission is to make Tenant living comfortable and affordable.</p>
             </div>
             
             <div class="footer-column">
@@ -536,8 +532,8 @@ try {
                 <h3>Contact Us</h3>
                 <ul>
                     <li><i class="fas fa-map-marker-alt"></i> 123 University Ave, Campus Town</li>
-                    <li><i class="fas fa-phone"></i> +1 (555) 123-4567</li>
-                    <li><i class="fas fa-envelope"></i> info@unihomes.com</li>
+                    <li><i class="fas fa-phone"></i> +233 240 687 599</li>
+                    <li><i class="fas fa-envelope"></i> info@landlords&tenant.com</li>
                 </ul>
                 <div class="social-links" style="margin-top: 10px;">
                     <a href="#" style="color: white; margin-right: 10px;"><i class="fab fa-facebook-f"></i></a>

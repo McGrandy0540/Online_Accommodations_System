@@ -507,7 +507,7 @@ $failed_payments = array_filter($payments, fn($p) => $p['status'] === 'failed');
                 <i class="fas fa-tachometer-alt"></i>
                 <span>Dashboard</span>
             </a>
-            <a href="../properties/index.php">
+            <a href="../property_dashboard.php">
                 <i class="fas fa-building"></i>
                 <span>Properties</span>
             </a>
@@ -589,7 +589,7 @@ $failed_payments = array_filter($payments, fn($p) => $p['status'] === 'failed');
             <div class="row mb-4">
                 <div class="col-md-3 col-6">
                     <div class="stats-card stats-card-primary">
-                        <h3>$<?= number_format($total_received, 2) ?></h3>
+                        <h3>GHS<?= number_format($total_received, 2) ?></h3>
                         <p>Total Received</p>
                     </div>
                 </div>
@@ -671,7 +671,7 @@ $failed_payments = array_filter($payments, fn($p) => $p['status'] === 'failed');
                             <div class="payment-card card">
                                 <div class="card-header">
                                     <div>
-                                        <h5 class="mb-0">$<?= number_format($payment['amount'], 2) ?></h5>
+                                        <h5 class="mb-0">GHS <?= number_format($payment['amount'], 2) ?></h5>
                                         <small class="text-muted"><?= date('M j, Y', strtotime($payment['created_at'])) ?></small>
                                     </div>
                                     <span class="payment-status <?= 'status-' . $payment['status'] ?>">

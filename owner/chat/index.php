@@ -121,7 +121,7 @@ if ($user_type === 'student') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat | UniHomes</title>
+    <title>Chat | Landloards&Tenant</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -590,14 +590,14 @@ if ($user_type === 'student') {
     <!-- Sidebar Navigation -->
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <h4 class="mb-0"><i class="fas fa-home"></i> <span>UniHomes</span></h4>
+            <h4 class="mb-0"><i class="fas fa-home"></i> <span>Landloards&Tenant</span></h4>
         </div>
         <div class="sidebar-menu">
             <a href="../dashboard.php">
                 <i class="fas fa-tachometer-alt"></i>
                 <span>Dashboard</span>
             </a>
-            <a href="../properties/index.php">
+            <a href="../poperty_dashboard.php">
                 <i class="fas fa-building"></i>
                 <span>Properties</span>
             </a>
@@ -651,7 +651,7 @@ if ($user_type === 'student') {
                     <li><a class="dropdown-item" href="/property_owner/profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
                     <li><a class="dropdown-item" href="/property_owner/settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
                     <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="/logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                   
                 </ul>
             </div>
         </div>

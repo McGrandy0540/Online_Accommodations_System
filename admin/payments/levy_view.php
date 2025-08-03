@@ -391,8 +391,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_payment'])) {
                     <li><a href="index.php" class="active"><i class="fas fa-money-bill-wave"></i> Payments</a></li>
                     <li><a href="../users/index.php"><i class="fas fa-users"></i> Users</a></li>
                     <li><a href="../reports/index.php"><i class="fas fa-chart-bar"></i> Reports</a></li>
-                    <li><a href="../settings/index.php"><i class="fas fa-cog"></i> Settings</a></li>
-                    <li><a href="../../../auth/logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+
                 </ul>
             </div>
         </div>

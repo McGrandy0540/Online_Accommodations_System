@@ -787,7 +787,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_notifications'
                     <li><a href="chat/"><i class="fas fa-comments"></i> <span class="menu-text">Messages</span></a></li>
                     <li><a href="maintenance/"><i class="fas fa-tools"></i> <span class="menu-text">Maintenance</span></a></li>
                     <li><a href="virtual-tours/"><i class="fas fa-video"></i> <span class="menu-text">Virtual Tours</span></a></li>
-                    <li><a href="roommate-matching/"><i class="fas fa-users"></i> <span class="menu-text">Roommate Matching</span></a></li>
                     <li><a href="announcement.php"><i class="fas fa-bullhorn"></i> <span class="menu-text">Announcements</span></a></li>
                     <li><a href="settings.php" class="active"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
                 </ul>

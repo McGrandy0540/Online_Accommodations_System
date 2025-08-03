@@ -190,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register | University Accommodation System</title>
+    <title>Register | Landlords&Tenants</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -448,7 +448,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <!-- Header -->
     <header>
         <div class="container header-container">
-            <a href="../index.php" class="logo">Uni<span>Homes</span></a>
+            <a href="../index.php" class="logo">Landlords<span>&Tenants</span></a>
         </div>
     </header>
 
@@ -458,7 +458,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <div class="register-container">
                 <div class="register-header">
                     <h1>Create an Account</h1>
-                    <p>Join our university accommodation platform</p>
+                    <p>Join our accommodation platform</p>
                 </div>
                 
                 <div class="register-body">
@@ -547,7 +547,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <div class="radio-group">
                                 <div class="radio-option">
                                     <input type="radio" id="student" name="status" value="student" checked>
-                                    <label for="student">Student</label>
+                                    <label for="student">Tenant</label>
                                 </div>
                                 <div class="radio-option">
                                     <input type="radio" id="owner" name="status" value="property_owner">
@@ -594,7 +594,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <!-- Footer -->
     <footer>
         <div class="container">
-            <p>&copy; <?php echo date('Y'); ?> University Accommodation System. All rights reserved.</p>
+            <p>&copy; <?php echo date('Y'); ?> Landlords&Tenants. All rights reserved.</p>
             <p><a href="../index.php">Return to homepage</a></p>
         </div>
     </footer>

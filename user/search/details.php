@@ -78,8 +78,9 @@ $review_stmt->execute([$property_id]);
 $reviews = $review_stmt->fetchAll();
 
 // Calculate star ratings
-$fullStars = floor($property['average_rating']);
-$halfStar = ceil($property['average_rating'] - $fullStars);
+$average_rating = $property['average_rating'] ?? 0;
+$fullStars = floor($average_rating);
+$halfStar = ceil($average_rating - $fullStars);
 $emptyStars = 5 - $fullStars - $halfStar;
 ?>
 
@@ -92,6 +93,7 @@ $emptyStars = 5 - $fullStars - $halfStar;
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
     <style>
         :root {
             --primary-color: #3498db;
@@ -535,12 +537,12 @@ $emptyStars = 5 - $fullStars - $halfStar;
                             <i class="far fa-star"></i>
                         <?php endfor; ?>
                     </div>
-                    <span class="ms-2">(<?= number_format($property['average_rating'], 1) ?>)</span>
+                    <span class="ms-2">(<?= number_format($average_rating, 1) ?>)</span>
                     <span class="ms-3"><?= count($reviews) ?> reviews</span>
                 </div>
                 
                 <div class="property-price mb-4">
-                    <h2 class="text-primary">GHS <?= number_format($property['price'], 2) ?> <span class="text-muted" style="font-size: 1rem;">/year (per student)</span></h2>
+                    <h2 class="text-primary">GHS <?= number_format($property['price'], 2) ?> <span class="text-muted" style="font-size: 1rem;">/year (per tenant)</span></h2>
                 </div>
                 
                 <div class="property-features mb-4">
@@ -610,7 +612,7 @@ $emptyStars = 5 - $fullStars - $halfStar;
                                 <div class="d-flex gap-3 mt-2">
                                     <div class="d-flex align-items-center">
                                         <i class="fas fa-user-friends me-2 text-muted"></i>
-                                        <span>Capacity: <?= $room['capacity'] ?> students</span>
+                                        <span>Capacity: <?= $room['capacity'] ?> Tenants</span>
                                     </div>
                                     <div class="d-flex align-items-center">
                                         <i class="fas fa-<?= $room['gender'] == 'male' ? 'mars' : 'venus' ?> me-2 text-muted"></i>
@@ -626,7 +628,7 @@ $emptyStars = 5 - $fullStars - $halfStar;
                                 </div>
                                 
                                 <div class="price-per-student">
-                                    GHS <?= number_format($property['price'], 2) ?> per student
+                                    GHS <?= number_format($property['price'], 2) ?> per tenant/year
                                 </div>
                                 
                                 <div class="room-actions">
@@ -701,7 +703,7 @@ $emptyStars = 5 - $fullStars - $halfStar;
             <div class="property-booking">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2 class="text-primary">GHS <?= number_format($property['price'], 2) ?></h2>
-                    <span class="text-muted">/year (per student)</span>
+                    <span class="text-muted">/year (per tenant)</span>
                 </div>
                 
                 <div class="d-flex flex-column gap-2 mb-4">
@@ -753,31 +755,238 @@ $emptyStars = 5 - $fullStars - $halfStar;
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
     <script>
+        let map;
+        let userLocation = null;
+        let propertyLocation = null;
+        let routingControl = null;
+        
+        // Calculate distance between two points using Haversine formula
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the Earth in kilometers
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = R * c; // Distance in kilometers
+            return distance;
+        }
+        
+        // Format distance for display
+        function formatDistance(distance) {
+            if (distance < 1) {
+                return Math.round(distance * 1000) + ' meters';
+            } else {
+                return distance.toFixed(2) + ' km';
+            }
+        }
+        
+        // Get user's current location
+        function getUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        
+                        // Add user location marker
+                        const userMarker = L.marker([userLocation.lat, userLocation.lng], {
+                            icon: L.icon({
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41],
+                                popupAnchor: [1, -34],
+                                shadowSize: [41, 41]
+                            })
+                        }).addTo(map);
+                        
+                        userMarker.bindPopup('<b>Your Location</b><br>Click on the property marker to get directions!');
+                        
+                        // Fit map to show both locations
+                        if (propertyLocation) {
+                            const group = new L.featureGroup([userMarker, propertyMarker]);
+                            map.fitBounds(group.getBounds().pad(0.1));
+                        }
+                    },
+                    function(error) {
+                        console.log('Geolocation error:', error);
+                        let errorMessage = 'Unable to get your location. ';
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage += 'Please allow location access to get directions.';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage += 'Location information is unavailable.';
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage += 'Location request timed out.';
+                                break;
+                        }
+                        
+                        // Show error message in a popup
+                        const errorPopup = L.popup()
+                            .setLatLng(propertyLocation ? [propertyLocation.lat, propertyLocation.lng] : [5.6037, -0.1870])
+                            .setContent('<div class="alert alert-warning mb-0"><i class="fas fa-exclamation-triangle"></i> ' + errorMessage + '</div>')
+                            .openOn(map);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 300000 // 5 minutes
+                    }
+                );
+            } else {
+                console.log('Geolocation is not supported by this browser.');
+                const errorPopup = L.popup()
+                    .setLatLng(propertyLocation ? [propertyLocation.lat, propertyLocation.lng] : [5.6037, -0.1870])
+                    .setContent('<div class="alert alert-warning mb-0"><i class="fas fa-exclamation-triangle"></i> Geolocation is not supported by your browser.</div>')
+                    .openOn(map);
+            }
+        }
+        
+        // Show directions between user location and property
+        function showDirections() {
+            if (!userLocation || !propertyLocation) {
+                alert('Unable to calculate directions. Please ensure location access is enabled.');
+                return;
+            }
+            
+            // Remove existing routing control
+            if (routingControl) {
+                map.removeControl(routingControl);
+            }
+            
+            // Calculate distance
+            const distance = calculateDistance(
+                userLocation.lat, userLocation.lng,
+                propertyLocation.lat, propertyLocation.lng
+            );
+            
+            // Add routing control
+            routingControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(userLocation.lat, userLocation.lng),
+                    L.latLng(propertyLocation.lat, propertyLocation.lng)
+                ],
+                routeWhileDragging: false,
+                addWaypoints: false,
+                createMarker: function() { return null; }, // Don't create additional markers
+                lineOptions: {
+                    styles: [{ color: '#3498db', weight: 4, opacity: 0.7 }]
+                },
+                show: false, // Hide the instruction panel initially
+                collapsible: true
+            }).addTo(map);
+            
+            // Update property marker popup with distance and directions info
+            propertyMarker.setPopupContent(`
+                <div style="min-width: 200px;">
+                    <h6><b><?= addslashes($property['property_name']) ?></b></h6>
+                    <p class="mb-2"><i class="fas fa-map-marker-alt text-primary"></i> <?= addslashes($property['location']) ?></p>
+                    <div class="mb-2">
+                        <i class="fas fa-route text-success"></i> 
+                        <strong>Distance: ${formatDistance(distance)}</strong>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-sm btn-primary" onclick="toggleDirections()">
+                            <i class="fas fa-directions"></i> Toggle Directions
+                        </button>
+                        <a href="https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${propertyLocation.lat},${propertyLocation.lng}" 
+                           target="_blank" class="btn btn-sm btn-success">
+                            <i class="fab fa-google"></i> Open in Google Maps
+                        </a>
+                    </div>
+                </div>
+            `);
+            
+            // Open the updated popup
+            propertyMarker.openPopup();
+        }
+        
+        // Toggle directions panel visibility
+        function toggleDirections() {
+            if (routingControl) {
+                const container = routingControl.getContainer();
+                if (container.style.display === 'none') {
+                    container.style.display = 'block';
+                } else {
+                    container.style.display = 'none';
+                }
+            }
+        }
+        
         // Initialize Leaflet map
         function initMap() {
             <?php if ($property['latitude'] && $property['longitude']): ?>
-                const map = L.map('property-map').setView([<?= $property['latitude'] ?>, <?= $property['longitude'] ?>], 15);
+                propertyLocation = {
+                    lat: <?= $property['latitude'] ?>,
+                    lng: <?= $property['longitude'] ?>
+                };
+                
+                map = L.map('property-map').setView([propertyLocation.lat, propertyLocation.lng], 15);
                 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 }).addTo(map);
                 
-                L.marker([<?= $property['latitude'] ?>, <?= $property['longitude'] ?>])
-                    .addTo(map)
-                    .bindPopup('<?= addslashes($property['property_name']) ?>');
+                // Property marker with custom red icon
+                window.propertyMarker = L.marker([propertyLocation.lat, propertyLocation.lng], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(map);
+                
+                // Initial popup content
+                propertyMarker.bindPopup(`
+                    <div style="min-width: 200px;">
+                        <h6><b><?= addslashes($property['property_name']) ?></b></h6>
+                        <p class="mb-2"><i class="fas fa-map-marker-alt text-primary"></i> <?= addslashes($property['location']) ?></p>
+                        <div class="d-grid">
+                            <button class="btn btn-sm btn-primary" onclick="showDirections()">
+                                <i class="fas fa-location-arrow"></i> Get Directions
+                            </button>
+                        </div>
+                        <small class="text-muted mt-2 d-block">Click "Get Directions" to see distance and route from your location</small>
+                    </div>
+                `);
+                
+                // Get user location automatically
+                setTimeout(getUserLocation, 1000);
+                
             <?php else: ?>
                 // Default to Accra if no coordinates
-                const map = L.map('property-map').setView([5.6037, -0.1870], 13);
+                map = L.map('property-map').setView([5.6037, -0.1870], 13);
                 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 }).addTo(map);
+                
+                // Show message that location is not available
+                L.popup()
+                    .setLatLng([5.6037, -0.1870])
+                    .setContent('<div class="alert alert-info mb-0"><i class="fas fa-info-circle"></i> Property location not available</div>')
+                    .openOn(map);
             <?php endif; ?>
         }
 
         // Initialize map when page loads
         document.addEventListener('DOMContentLoaded', initMap);
+        
+        // Make functions globally available
+        window.showDirections = showDirections;
+        window.toggleDirections = toggleDirections;
     </script>
 </body>
 </html>

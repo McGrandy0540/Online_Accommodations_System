@@ -181,14 +181,14 @@ function sendNotification($userId, $message, $type = 'info', $data = []) {
         [$userId, $message, $type, json_encode($data)]
     );
     
-    // Send real-time notification if enabled
-    if (ENABLE_REALTIME_NOTIFICATIONS) {
-        sendRealtimeNotification($userId, [
-            'message' => $message,
-            'type' => $type,
-            'timestamp' => time()
-        ]);
-    }
+    // // Send real-time notification if enabled
+    // if (ENABLE_REALTIME_NOTIFICATIONS) {
+    //     sendRealtimeNotification($userId, [
+    //         'message' => $message,
+    //         'type' => $type,
+    //         'timestamp' => time()
+    //     ]);
+    // }
     
     return $stmt !== false;
 }

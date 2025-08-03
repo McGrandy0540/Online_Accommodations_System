@@ -73,8 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 status = ?,
                 latitude = ?,
                 longitude = ?,
-                approved = ?,
-                total_rooms = ?
+                approved = ?
             WHERE id = ?
         ");
         
@@ -93,8 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['status'],
             $_POST['latitude'] ?? null,
             $_POST['longitude'] ?? null,
-            $_POST['approved'] ? 1 : 0,
-            $_POST['total_rooms'] ?? 1,
+            isset($_POST['approved']) ? 1 : 0,
             $propertyId
         ]);
         
@@ -187,7 +185,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Property | UniHomes Admin</title>
+    <title>Edit Property | landlords&Tenant Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -621,7 +619,7 @@ try {
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label>Total Number of Rooms *</label>
-                                    <input type="number" name="total_rooms" class="form-control" min="1" value="<?php echo htmlspecialchars($property['total_rooms'] ?? count($propertyRooms)); ?>" required id="totalRooms">
+                                    <input type="number" name="total_rooms" class="form-control" min="1" value="<?php echo count($propertyRooms); ?>" required id="totalRooms">
                                     <small class="text-muted">Current: <?php echo count($propertyRooms); ?> rooms</small>
                                 </div>
                             </div>

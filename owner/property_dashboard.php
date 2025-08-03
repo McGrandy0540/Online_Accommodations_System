@@ -704,7 +704,7 @@ $earnings = $earnings_stmt->fetch();
     <header class="main-header">
         <div class="header-container">
             <a href="../../" class="logo">
-                <img src="../assets/images/ktu logo.png" alt="UniHomes Logo">
+                <img src="../assets/images/logo-removebg-preview.png" alt="UniHomes Logo">
                 <span>Landlords&Tenant</span>
             </a>
             
@@ -783,7 +783,7 @@ $earnings = $earnings_stmt->fetch();
                         <div class="col-md-4 text-md-end">
                             <div class="d-flex align-items-center justify-content-end">
                                 <div class="me-3 position-relative">
-                                    <a href="notifications.php" class="text-white position-relative">
+                                    <a href="notification/index.php" class="text-white position-relative">
                                         <i class="fas fa-bell fa-lg"></i>
                                         <?php if(count($unread_notifications) > 0): ?>
                                         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
@@ -1287,7 +1287,7 @@ $earnings = $earnings_stmt->fetch();
                                                         </span>
                                                     </td>
                                                     <td>
-                                                        <a href="../bookings/view.php?id=<?= $booking['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                                        <a href="bookings/view.php?id=<?= $booking['id'] ?>" class="btn btn-sm btn-outline-primary">
                                                             <i class="fas fa-eye"></i> View
                                                         </a>
                                                     </td>

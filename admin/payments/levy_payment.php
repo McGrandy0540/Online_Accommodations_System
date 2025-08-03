@@ -212,11 +212,12 @@ $pendingPayments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             z-index: 100;
             padding: 48px 0 0;
             box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
-            background-color: #212529;
+            background-color: #2c3e50;
         }
         .sidebar .nav-link {
-            color: rgba(255, 255, 255, .5);
+            color: white;
             padding: 0.5rem 1rem;
+            font-size: 1.2rem;
         }
         .sidebar .nav-link.active {
             color: #fff;
@@ -226,10 +227,11 @@ $pendingPayments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             color: rgba(255, 255, 255, .75);
         }
         .sidebar-heading {
-            font-size: .75rem;
-            text-transform: uppercase;
-            color: rgba(255, 255, 255, .5);
+            font-size: 2rem;
+            /* text-transform: uppercase; */
+            color: white;
             padding: 0.5rem 1rem;
+            font-weight: bold;
         }
         main {
             padding-top: 1rem;
@@ -242,63 +244,31 @@ $pendingPayments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <!-- Sidebar -->
             <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
                 <div class="position-sticky pt-3">
-                    <div class="sidebar-heading">Administration</div>
+                    <div class="sidebar-heading">Landlords&Tenant</div>
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link" href="dashboard.php">
+                            <a class="nav-link" href="../dashboard.php">
                                 <i class="bi bi-speedometer2 me-2"></i>Dashboard
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="properties.php">
+                            <a class="nav-link" href="../properties/index.php">
                                 <i class="bi bi-house-door me-2"></i>Properties
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="users.php">
+                            <a class="nav-link" href="../users/index.php">
                                 <i class="bi bi-people me-2"></i>Users
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link active" href="levy_approvals.php">
-                                <i class="bi bi-cash-coin me-2"></i>Levy Approvals
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="bookings.php">
-                                <i class="bi bi-calendar-check me-2"></i>Bookings
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="payments.php">
+                            <a class="nav-link" href="index.php">
                                 <i class="bi bi-credit-card me-2"></i>Payments
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="reports.php">
-                                <i class="bi bi-file-earmark-text me-2"></i>Reports
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="settings.php">
-                                <i class="bi bi-gear me-2"></i>Settings
-                            </a>
-                        </li>
+
                     </ul>
                     
-                    <div class="sidebar-heading mt-4">Account</div>
-                    <ul class="nav flex-column">
-                        <li class="nav-item">
-                            <a class="nav-link" href="profile.php">
-                                <i class="bi bi-person me-2"></i>Profile
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="logout.php">
-                                <i class="bi bi-box-arrow-right me-2"></i>Logout
-                            </a>
-                        </li>
-                    </ul>
                 </div>
             </nav>
 

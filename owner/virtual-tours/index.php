@@ -924,8 +924,8 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     <header class="main-header">
         <div class="header-container">
             <a href="../../" class="logo">
-                <img src="../../assets/images/ktu logo.png" alt="UniHomes Logo">
-                <span>Landlords&Tenant</span>
+                <img src="../../assets/images/ktu logo.png" alt="landlords&tenants Logo">
+                <span>landlords&tenants</span>
             </a>
             
             <div class="user-controls">
@@ -1219,8 +1219,8 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     <footer class="main-footer">
         <div class="footer-container">
             <div class="footer-column">
-                <h3>About UniHomes</h3>
-                <p>Providing quality student accommodation with modern amenities and secure living spaces.</p>
+                <h3>About landlords&tenants</h3>
+                <p>Providing quality accommodation with modern amenities and secure living spaces.</p>
             </div>
             
             <div class="footer-column">
@@ -1248,7 +1248,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                 <ul>
                     <li><i class="fas fa-map-marker-alt me-2"></i> 123 Campus Drive, University Town</li>
                     <li><i class="fas fa-phone me-2"></i> +233 240687599</li>
-                    <li><i class="fas fa-envelope me-2"></i> owners@unihomes.com</li>
+                    <li><i class="fas fa-envelope me-2"></i> owners@landlords&tenants.com</li>
                 </ul>
                 <div class="social-links">
                     <a href="#"><i class="fab fa-facebook-f"></i></a>
@@ -1259,7 +1259,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             </div>
             
             <div class="copyright">
-                &copy; <?= date('Y') ?> UniHomes. All rights reserved.
+                &copy; <?= date('Y') ?> landlords&tenants. All rights reserved.
             </div>
         </div>
     </footer>

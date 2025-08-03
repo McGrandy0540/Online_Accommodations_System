@@ -69,7 +69,7 @@ if (empty($_SESSION['csrf_token'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reviews Management | UniHomes Admin</title>
+    <title>Reviews Management | Landlords&Tenant Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -392,7 +392,7 @@ if (empty($_SESSION['csrf_token'])) {
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h2>UniHomes Admin</h2>
+                <h2>Landlords&Tenant Admin</h2>
             </div>
             <div class="sidebar-menu">
                 <ul>
@@ -402,7 +402,7 @@ if (empty($_SESSION['csrf_token'])) {
                     <li><a href="reviews/" class="active"><i class="fas fa-star"></i> Reviews</a></li>
                     <li><a href="../bookings/"><i class="fas fa-calendar-alt"></i> Bookings</a></li>
                     <li><a href="../payments/"><i class="fas fa-wallet"></i> Payments</a></li>
-                    <li><a href="../settings/"><i class="fas fa-cog"></i> Settings</a></li>
+                  
                     <li>
                         <form action="logout.php" method="POST">
                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">

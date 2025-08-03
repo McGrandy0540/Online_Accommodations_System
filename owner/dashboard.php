@@ -84,11 +84,7 @@ $notifications = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id
 $notifications->execute([$owner_id]);
 $unread_notifications_count = $notifications->fetchColumn();
 
-// AI Fraud Detection Alert
-$fraud_alerts = $pdo->prepare("SELECT COUNT(*) FROM fraud_detection_logs 
-                              WHERE user_id = ? AND flagged = 1");
-$fraud_alerts->execute([$owner_id]);
-$fraud_count = $fraud_alerts->fetchColumn();
+
 
 // Get profile picture path
 $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
@@ -964,7 +960,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     <header class="main-header">
         <div class="header-container">
             <a href="../" class="logo">
-                <img src="../assets/images/ktu logo.png" alt="UniHomes Logo">
+                <img src="../assets/images/logo-removebg-preview.png" alt="landlords&tenants Logo">
                 <span>Landlords&Tenants</span>
             </a>
             
@@ -1115,17 +1111,6 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                         </div>
                     </div>
 
-                    <!-- Fraud Detection Alert -->
-                    <?php if ($fraud_count > 0): ?>
-                    <div class="alert">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <div>
-                            <strong>Fraud Alert:</strong> <?= $fraud_count ?> suspicious activities detected
-                            <a href="fraud-alerts.php">View details</a>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-
                     <!-- Recent Activity Section -->
                     <div class="card recent-activity">
                         <div class="card-header">
@@ -1169,8 +1154,8 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     <footer class="main-footer">
         <div class="footer-container">
             <div class="footer-column">
-                <h3>About UniHomes</h3>
-                <p>Providing quality student accommodation with modern amenities and secure living spaces.</p>
+                <h3>About Landlords&Tenants</h3>
+                <p>Providing quality accommodation with modern amenities and secure living spaces.</p>
             </div>
             
             <div class="footer-column">
@@ -1209,7 +1194,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             </div>
             
             <div class="copyright">
-                &copy; <?= date('Y') ?> UniHomes. All rights reserved.
+                &copy; <?= date('Y') ?> Landlords&Tenants. All rights reserved.
             </div>
         </div>
     </footer>

@@ -1,26 +1,22 @@
 <?php
 session_start();
-require_once __DIR__ . '../../../config/database.php';
-require_once 'sentiment_analysis.php'; // AI sentiment analysis functions
+require_once __DIR__ . '../../../config/database.php'; // Fixed path
+require_once 'sentiment_analysis.php';
 
 $pdo = Database::getInstance();
 $user_id = $_SESSION['user_id'] ?? null;
 $user_type = $_SESSION['status'] ?? null;
 
-// Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: /login.php");
     exit();
 }
 
-// Function to analyze sentiment using AI
 function analyzeSentiment($text) {
-    // In a real implementation, you would call an AI service API here
-    // For demo purposes, we'll use our local sentiment analysis function
-    return performSentimentAnalysis($text);
+    $textAnalyzer = new TextAnalysis();
+    return $textAnalyzer->analyzeSentiment($text);
 }
 
-// Handle form submission for new reviews
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_review'])) {
     $property_id = $_POST['property_id'];
     $rating = $_POST['rating'];
@@ -33,14 +29,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_review'])) {
         exit();
     }
     
-    // Validate comment
     if (empty(trim($comment))) {
         $_SESSION['error_message'] = "Please write your review comment.";
         header("Location: reviews.php");
         exit();
     }
     
-    // Analyze sentiment
+    // Prevent duplicate reviews
+    $checkStmt = $pdo->prepare("SELECT id FROM reviews WHERE user_id = ? AND property_id = ?");
+    $checkStmt->execute([$user_id, $property_id]);
+    if ($checkStmt->rowCount() > 0) {
+        $_SESSION['error_message'] = "You've already reviewed this property";
+        header("Location: reviews.php");
+        exit();
+    }
+
     $sentiment = analyzeSentiment($comment);
     
     try {
@@ -65,27 +68,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_review'])) {
     }
 }
 
-// Fetch reviews based on user type
+// Fetch reviews with proper filtering
 if ($user_type === 'property_owner') {
-    // Property owners see reviews for their properties
     $query = "
         SELECT r.*, u.username, u.profile_picture, p.property_name,
                CONCAT(u.username, ' reviewed ', p.property_name) as review_title
         FROM reviews r
-        JOIN users u ON r.user_id = u.id
-        JOIN property p ON r.property_id = p.id
+        JOIN users u ON r.user_id = u.id AND u.deleted = 0
+        JOIN property p ON r.property_id = p.id AND p.approved = 1 AND p.deleted = 0
         WHERE p.owner_id = ?
         ORDER BY r.created_at DESC
     ";
     $params = [$user_id];
 } else {
-    // Students and admins see all reviews
     $query = "
         SELECT r.*, u.username, u.profile_picture, p.property_name,
                CONCAT(u.username, ' reviewed ', p.property_name) as review_title
         FROM reviews r
-        JOIN users u ON r.user_id = u.id
-        JOIN property p ON r.property_id = p.id
+        JOIN users u ON r.user_id = u.id AND u.deleted = 0
+        JOIN property p ON r.property_id = p.id AND p.approved = 1 AND p.deleted = 0
         ORDER BY r.created_at DESC
     ";
     $params = [];
@@ -95,7 +96,6 @@ $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Calculate statistics
 $total_reviews = count($reviews);
 $average_rating = $total_reviews > 0 ? 
     array_sum(array_column($reviews, 'rating')) / $total_reviews : 0;
@@ -103,14 +103,17 @@ $positive_reviews = array_filter($reviews, fn($r) => $r['sentiment_label'] === '
 $negative_reviews = array_filter($reviews, fn($r) => $r['sentiment_label'] === 'negative');
 $neutral_reviews = array_filter($reviews, fn($r) => $r['sentiment_label'] === 'neutral');
 
-// Fetch properties for review form (only for students)
+// Fetch properties with proper filtering
 $properties = [];
 if ($user_type === 'student') {
     $stmt = $pdo->prepare("
-        SELECT p.id, p.property_name 
+        SELECT DISTINCT p.id, p.property_name 
         FROM property p
         JOIN bookings b ON p.id = b.property_id
-        WHERE b.user_id = ? AND b.status = 'paid'
+        WHERE b.user_id = ? 
+        AND b.status = 'paid'
+        AND p.approved = 1
+        AND p.deleted = 0
     ");
     $stmt->execute([$user_id]);
     $properties = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -155,7 +158,6 @@ if ($user_type === 'student') {
             min-height: 100vh;
         }
 
-        /* Top Navigation Bar */
         .top-nav {
             background: var(--secondary-color);
             color: white;
@@ -203,7 +205,6 @@ if ($user_type === 'student') {
             background-position: center;
         }
 
-        /* Sidebar Styles */
         .sidebar {
             background: var(--secondary-color);
             color: white;
@@ -254,7 +255,6 @@ if ($user_type === 'student') {
             text-align: center;
         }
 
-        /* Main Content */
         .main-content {
             margin-left: var(--sidebar-width);
             margin-top: var(--header-height);
@@ -263,7 +263,6 @@ if ($user_type === 'student') {
             transition: all var(--transition-speed);
         }
 
-        /* Stats Cards */
         .stats-card {
             border-radius: var(--border-radius);
             padding: 1.5rem;
@@ -302,7 +301,6 @@ if ($user_type === 'student') {
             opacity: 0.9;
         }
 
-        /* Review Cards */
         .review-card {
             border: none;
             border-radius: var(--border-radius);
@@ -393,7 +391,6 @@ if ($user_type === 'student') {
             opacity: 0.7;
         }
 
-        /* Review Form */
         .review-form {
             background: white;
             border-radius: var(--border-radius);
@@ -433,7 +430,6 @@ if ($user_type === 'student') {
             color: var(--warning-color);
         }
 
-        /* Charts */
         .chart-container {
             background: white;
             border-radius: var(--border-radius);
@@ -443,7 +439,6 @@ if ($user_type === 'student') {
             height: 100%;
         }
 
-        /* Responsive Styles */
         @media (max-width: 992px) {
             .sidebar {
                 width: var(--sidebar-collapsed-width);
@@ -510,7 +505,6 @@ if ($user_type === 'student') {
             }
         }
 
-        /* Mobile Menu Toggle */
         .mobile-menu-toggle {
             display: none;
             background: none;
@@ -612,7 +606,7 @@ if ($user_type === 'student') {
         <div class="top-nav-right">
             <div class="dropdown">
                 <div class="user-dropdown" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                    <div class="user-avatar" style="background-image: url('<?= $_SESSION['profile_picture'] ?? '' ?>')">
+                    <div class="user-avatar" style="background-image: url('<?= htmlspecialchars($_SESSION['profile_picture'] ?? '') ?>')">
                         <?= empty($_SESSION['profile_picture']) ? strtoupper(substr($_SESSION['username'], 0, 1)) : '' ?>
                     </div>
                     <span class="d-none d-md-inline"><?= htmlspecialchars($_SESSION['username']) ?></span>
@@ -746,7 +740,7 @@ if ($user_type === 'student') {
                         <div class="col-lg-6 col-12 mb-4">
                             <div class="review-card card">
                                 <div class="card-header">
-                                    <div class="user-avatar" style="background-image: url('<?= $review['profile_picture'] ?? '' ?>')">
+                                    <div class="user-avatar" style="background-image: url('<?= htmlspecialchars($review['profile_picture'] ?? '') ?>')">
                                         <?= empty($review['profile_picture']) ? strtoupper(substr($review['username'], 0, 1)) : '' ?>
                                     </div>
                                     <div class="user-info">
@@ -786,7 +780,6 @@ if ($user_type === 'student') {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
     <script>
-    // Mobile menu toggle
     document.addEventListener('DOMContentLoaded', function() {
         const mobileMenuToggle = document.getElementById('mobileMenuToggle');
         const sidebar = document.getElementById('sidebar');
@@ -804,19 +797,16 @@ if ($user_type === 'student') {
             });
         }
 
-        // Initialize Bootstrap dropdowns
         const dropdownElementList = [].slice.call(document.querySelectorAll('.dropdown-toggle'));
         const dropdownList = dropdownElementList.map(function (dropdownToggleEl) {
             return new bootstrap.Dropdown(dropdownToggleEl);
         });
 
-        // Initialize Bootstrap alerts
         const alertList = document.querySelectorAll('.alert');
         alertList.forEach(function (alert) {
             new bootstrap.Alert(alert);
         });
 
-        // Star rating functionality
         document.querySelectorAll('.star').forEach(star => {
             star.addEventListener('click', function() {
                 const rating = parseInt(this.getAttribute('data-rating'));
@@ -835,7 +825,6 @@ if ($user_type === 'student') {
         });
 
         // Initialize charts
-        // Sentiment Chart
         const sentimentCtx = document.getElementById('sentimentChart');
         if (sentimentCtx) {
             new Chart(sentimentCtx.getContext('2d'), {
@@ -878,10 +867,8 @@ if ($user_type === 'student') {
             });
         }
 
-        // Rating Distribution Chart
         const ratingCtx = document.getElementById('ratingChart');
         if (ratingCtx) {
-            // Calculate rating distribution
             const ratingCounts = [0, 0, 0, 0, 0];
             <?php foreach ($reviews as $review): ?>
                 ratingCounts[<?= $review['rating'] ?> - 1]++;
@@ -925,7 +912,6 @@ if ($user_type === 'student') {
             });
         }
 
-        // Form validation
         const reviewForm = document.querySelector('form[method="POST"]');
         if (reviewForm) {
             reviewForm.addEventListener('submit', function(e) {

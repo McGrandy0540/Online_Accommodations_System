@@ -639,14 +639,14 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <!-- Sidebar Navigation -->
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <h4 class="mb-0"><i class="fas fa-home"></i> <span>UniHomes</span></h4>
+            <h4 class="mb-0"><i class="fas fa-home"></i> <span>Landlords&Tenant</span></h4>
         </div>
         <div class="sidebar-menu">
             <a href="../dashboard.php">
                 <i class="fas fa-tachometer-alt"></i>
                 <span>Dashboard</span>
             </a>
-            <a href="../properties/index.php">
+            <a href="../property_dashboard.php">
                 <i class="fas fa-building"></i>
                 <span>Properties</span>
             </a>
@@ -794,8 +794,8 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <div class="range-slider">
                                 <input type="range" id="priceRangeSlider" min="0" max="5000" value="5000" step="50">
                                 <div class="range-values">
-                                    <span>GHS0</span>
-                                    <span>GHS5000</span>
+                                    <span>GHS 0</span>
+                                    <span>GHS 10000</span>
                                 </div>
                             </div>
                         </div>
@@ -826,19 +826,11 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php foreach ($bookings as $booking): ?>
                         <div class="col-lg-6 booking-item" 
                              data-status="<?= $booking['status'] ?>" 
-                             data-fraud-risk="<?= $booking['fraud_risk'] ?>" 
-                             data-compatibility="<?= $booking['compatibility'] ?>" 
-                             data-credit-score="<?= $booking['credit_score'] ?>"
                              data-price="<?= $booking['price'] ?>"
                              data-start-date="<?= date('Y-m-d', strtotime($booking['start_date'])) ?>"
                              data-end-date="<?= date('Y-m-d', strtotime($booking['end_date'])) ?>">
                             <div class="booking-card card">
-                                <?php if ($booking['fraud_risk'] > 70): ?>
-                                    <div class="fraud-alert" data-bs-toggle="tooltip" title="AI detected potential fraud">
-                                        <i class="fas fa-robot me-1"></i> High Risk
-                                    </div>
-                                <?php endif; ?>
-                                
+                          
                                 <div class="card-header">
                                     <h5 class="mb-0"><?= htmlspecialchars($booking['property_name']) ?></h5>
                                     <span class="status-badge <?= 'status-' . $booking['status'] ?>">
@@ -868,25 +860,13 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <div class="booking-detail">
                                         <h6><i class="fas fa-info-circle me-2"></i>Details</h6>
                                         <p>Booked on <?= date('M j, Y', strtotime($booking['booking_date'])) ?></p>
-                                        <p>Price: $<?= number_format($booking['price'], 2) ?></p>
+                                        <p>Price: GHS <?= number_format($booking['price'], 2) ?></p>
                                         <?php if ($booking['special_requests']): ?>
                                             <p><strong>Requests:</strong> <?= htmlspecialchars($booking['special_requests']) ?></p>
                                         <?php endif; ?>
                                     </div>
                                 </div>
-                                
-                                <div class="ai-recommendations">
-                                    <h6><i class="fas fa-brain me-2"></i>AI Recommendations</h6>
-                                    <p class="mb-1"><strong>Compatibility:</strong> <?= $booking['compatibility'] ?>% match</p>
-                                    <p class="mb-1"><strong>Payment Options:</strong> <?= implode(', ', $booking['payment_methods']) ?></p>
-                                    <?php if ($booking['fraud_risk'] > 70): ?>
-                                        <p class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i> Review recommended due to high fraud risk</p>
-                                    <?php elseif ($booking['fraud_risk'] > 40): ?>
-                                        <p class="text-warning"><i class="fas fa-exclamation-circle me-1"></i> Moderate fraud risk detected</p>
-                                    <?php else: ?>
-                                        <p class="text-success"><i class="fas fa-check-circle me-1"></i> Low fraud risk</p>
-                                    <?php endif; ?>
-                                </div>
+                               
                                 
                                 <div class="action-buttons">
                                     <?php if ($booking['status'] === 'pending'): ?>
@@ -900,12 +880,10 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <a href="../chat/?booking=<?= $booking['id'] ?>" class="btn btn-info">
                                         <i class="fas fa-comments me-1"></i> Chat
                                     </a>
-                                    <a href="../../virtual-tours/schedule.php?property=<?= $booking['property_id'] ?>" class="btn btn-secondary">
+                                    <a href="../virtual-tours/api/schedule.php?property=<?= $booking['property_id'] ?>" class="btn btn-secondary">
                                         <i class="fas fa-vr-cardboard me-1"></i> Virtual Tour
                                     </a>
-                                    <a href="../digital-keys/generate.php?booking=<?= $booking['id'] ?>" class="btn btn-primary">
-                                        <i class="fas fa-key me-1"></i> Digital Key
-                                    </a>
+                                   
                                 </div>
                             </div>
                         </div>

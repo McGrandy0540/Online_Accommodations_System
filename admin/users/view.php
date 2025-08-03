@@ -59,13 +59,7 @@ if ($user['status'] === 'property_owner') {
     $userReviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// Get credit score history
-$stmt = $db->prepare("SELECT * FROM credit_score_history 
-                     WHERE user_id = ? 
-                     ORDER BY created_at DESC 
-                     LIMIT 5");
-$stmt->execute([$userId]);
-$creditHistory = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 
 // Generate avatar initials
 $userInitial = strtoupper(substr($user['username'], 0, 1));
@@ -469,16 +463,6 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
             </div>
 
             <div class="grid">
-                <div class="info-card">
-                    <div class="info-title">Credit Score</div>
-                    <div class="info-value credit-score"><?php echo number_format($user['credit_score'], 1); ?></div>
-                    <?php if ($user['last_score_update']): ?>
-                        <div class="info-title" style="margin-top: 0.5rem;">
-                            Last updated: <?php echo date('M d, Y', strtotime($user['last_score_update'])); ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                
                 <div class="info-card">
                     <div class="info-title">Payment Method</div>
                     <div class="info-value">

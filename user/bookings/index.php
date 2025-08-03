@@ -1,12 +1,18 @@
-<<?php
+<?php
 // bookings/new.php - Create New Booking
 session_start();
+
 require_once __DIR__. '../../../config/database.php';
 
-// Check if user is a student
-if (!isset($_SESSION['user_id']) || $_SESSION['status'] !== 'student') {
+// Redirect to login if not authenticated
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../../auth/login.php");
     exit();
+}
+
+// Check if user is a student
+if ($_SESSION['status'] !== 'student') {
+    die("<h1>Access Denied</h1><p>You don't have permission to access this page.</p>");
 }
 
 $student_id = $_SESSION['user_id'];
@@ -665,7 +671,7 @@ function getProfilePicturePath($path) {
                                                 </div>
                                                 <p class="mb-1">
                                                     <i class="fas fa-user-friends me-2"></i>
-                                                    Capacity: <?= $room_item['capacity'] ?> students
+                                                    Capacity: <?= $room_item['capacity'] ?> tenants
                                                 </p>
                                                 <p class="mb-1">
                                                     <i class="fas fa-user-check me-2"></i>

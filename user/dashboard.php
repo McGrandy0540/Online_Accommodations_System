@@ -902,7 +902,7 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
     <header class="main-header">
         <div class="header-container">
             <a href="../" class="logo">
-                <img src="../assets/images/logo-removebg-preview.png" alt="UniHomes Logo">
+                <img src="../assets/images/logo-removebg-preview.png" alt="Landlords&Tenant Logo">
                 <span>landlords&Tenants</span>
             </a>
             
@@ -943,7 +943,7 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h2>Student Dashboard</h2>
+                <h2>Tenant Dashboard</h2>
                 <button class="toggle-btn" id="sidebarToggle">
                     <i class="fas fa-chevron-left"></i>
                 </button>
@@ -978,7 +978,7 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                     <!-- Profile Card -->
                     <div class="profile-card">
                         <div class="profile-card-header">
-                            <h5 class="mb-0"><i class="fas fa-user-graduate me-2"></i>Student Profile</h5>
+                            <h5 class="mb-0"><i class="fas fa-user-graduate me-2"></i>Tenant Profile</h5>
                         </div>
                         <div class="profile-card-body">
                             <div class="profile-avatar-container">

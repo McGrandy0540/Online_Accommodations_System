@@ -18,7 +18,7 @@ require_once __DIR__ . '/config/email.php';
 
 // Load required files with proper error handling
 $required_files = [
-    'includes/EmailService.php' => 'Email Service',
+    'includes/Services.php' => 'Email Service',
     'EmailHelper.php' => 'Email Helper',
     'vendor/autoload.php' => 'Composer Autoloader'
 ];
@@ -222,7 +222,7 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>University Accommodation System</title>
+    <title>Online Accommodation System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -820,7 +820,7 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
         <div class="container header-container">
             <a href="index.php" class="logo">
                 <img src="assets/images/ktu logo.png" alt="Logo" width="60" height="60" class="me-2">
-                Uni<span>Homes</span>
+                Landlords<span>&Tenants</span>
             </a>
             
             <button class="mobile-menu-btn" id="mobileMenuBtn">
@@ -846,7 +846,7 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
     <!-- Hero Section -->
     <section class="hero">
         <div class="container hero-content">
-            <h1>Find Your Perfect University Accommodation</h1>
+            <h1>Find Your Perfect Accommodation</h1>
             <p>Discover comfortable, affordable housing options near your campus with our trusted platform</p>
             
             <form class="search-bar" action="search.php" method="GET">
@@ -860,8 +860,8 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
     <section class="features" id="features">
         <div class="container">
             <div class="section-title">
-                <h2>Why Choose UniHomes</h2>
-                <p>Our platform offers the best solutions for students and property owners alike</p>
+                <h2>Why Choose Landlords&Tenants</h2>
+                <p>Our platform offers the best solutions for tenants and property owners alike</p>
             </div>
             
             <div class="features-grid">
@@ -894,7 +894,7 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
                         <i class="fas fa-star"></i>
                     </div>
                     <h3>Verified Reviews</h3>
-                    <p>Read authentic reviews from fellow students</p>
+                    <p>Read authentic reviews from fellow Tenants</p>
                 </div>
                 
                 <div class="feature-card">
@@ -921,10 +921,10 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
         <div class="container">
             <div class="about-content">
                 <div class="about-text">
-                    <h2>About UniHomes</h2>
-                    <p>UniHomes is the leading platform connecting students with quality accommodation near universities across the country. Founded in 2023, we've helped thousands of students find their perfect home away from home.</p>
+                    <h2>About Landlords&Tenants</h2>
+                    <p>Landlords&Tenant is the leading platform connecting tenants with quality accommodation near universities across the country. Founded in 2023, we've helped thousands of tenants find their perfect home away from home.</p>
                     
-                    <p>Our mission is to simplify the accommodation search process while ensuring safety, affordability, and convenience for both students and property owners.</p>
+                    <p>Our mission is to simplify the accommodation search process while ensuring safety, affordability, and convenience for both tenants and property owners.</p>
                     
                     <ul>
                         <li>Trusted by over 50 universities nationwide</li>
@@ -935,7 +935,7 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
                 </div>
                 
                 <div class="about-image">
-                    <img src="assets/images/about_us.jpg" alt="Students enjoying their accommodation">
+                    <img src="assets/images/about_us.jpg" alt="Tenants enjoying their accommodation">
                 </div>
             </div>
         </div>
@@ -1069,9 +1069,9 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
         <div class="container">
             <div class="footer-container">
                 <div class="footer-col">
-                    <h3>UniHomes</h3>
-                    <p>Your trusted partner for university accommodation solutions.</p>
-                    <p>Helping students find their perfect home since 2023.</p>
+                    <h3>Landlords&Tenant</h3>
+                    <p>Your trusted partner for  accommodation solutions.</p>
+                    <p>Helping tenants find their perfect home since 2023.</p>
                 </div>
                 
                 <div class="footer-col">
@@ -1091,7 +1091,6 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
                     <ul class="footer-links">
                         <li><a href="student/search.php">Find Accommodation</a></li>
                         <li><a href="owner/properties/add.php">List Your Property</a></li>
-                        <li><a href="student/roommate.php">Roommate Matching</a></li>
                         <li><a href="#">Payment Options</a></li>
                         <li><a href="#">Safety Guidelines</a></li>
                     </ul>
@@ -1108,7 +1107,7 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
             </div>
             
             <div class="footer-bottom">
-                <p>&copy; 2025 UniHomes. All Rights Reserved. | <a href="#">Privacy Policy</a> | <a href="#">Terms of Service</a></p>
+                <p>&copy; 2025 Landlords&Tenants. All Rights Reserved. | <a href="#">Privacy Policy</a> | <a href="#">Terms of Service</a></p>
             </div>
         </div>
     </footer>

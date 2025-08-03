@@ -523,62 +523,6 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             color: var(--primary-color);
         }
         
-        /* Mobile Styles */
-        @media (max-width: 992px) {
-            .property-main-image {
-                height: 300px;
-            }
-            
-            .property-header {
-                padding: 1.5rem 0;
-            }
-            
-            .property-section {
-                padding: 1.5rem;
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .property-main-image {
-                height: 250px;
-            }
-            
-            .property-header {
-                padding: 1rem 0;
-            }
-            
-            .property-section {
-                padding: 1rem;
-            }
-            
-            .owner-avatar {
-                width: 80px;
-                height: 80px;
-            }
-        }
-        
-        @media (max-width: 576px) {
-            .property-main-image {
-                height: 200px;
-            }
-            
-            .property-title {
-                font-size: 1.5rem;
-            }
-            
-            .property-price {
-                font-size: 1.25rem;
-            }
-            
-            .property-section {
-                padding: 1rem 0.75rem;
-            }
-            
-            .feature-item {
-                width: 100%;
-            }
-        }
-        
         /* Image gallery modal */
         .gallery-modal .modal-dialog {
             max-width: 90%;
@@ -633,9 +577,85 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             display: none;
         }
         
+        /* Mobile Styles */
+        @media (max-width: 992px) {
+            .property-main-image {
+                height: 300px;
+            }
+            
+            .property-header {
+                padding: 1.5rem 0;
+            }
+            
+            .property-section {
+                padding: 1.5rem;
+            }
+            
+            .room-card {
+                padding: 1rem;
+            }
+        }
+        
         @media (max-width: 768px) {
+            .property-main-image {
+                height: 250px;
+            }
+            
+            .property-header {
+                padding: 1rem 0;
+            }
+            
+            .property-section {
+                padding: 1rem;
+            }
+            
+            .owner-avatar {
+                width: 80px;
+                height: 80px;
+            }
+            
             .floating-action-btn {
                 display: flex;
+            }
+            
+            .room-card {
+                margin-bottom: 1rem;
+            }
+            
+            .similar-property {
+                margin-bottom: 1rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .property-main-image {
+                height: 200px;
+            }
+            
+            .property-title {
+                font-size: 1.5rem;
+            }
+            
+            .property-price {
+                font-size: 1.25rem;
+            }
+            
+            .property-section {
+                padding: 1rem 0.75rem;
+            }
+            
+            .feature-item {
+                width: 100%;
+            }
+            
+            .room-card {
+                padding: 1rem;
+                margin-bottom: 1rem;
+            }
+            
+            .room-select-btn {
+                font-size: 0.8rem;
+                padding: 0.25rem 0.5rem;
             }
         }
     </style>
@@ -646,8 +666,8 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
         <div class="container">
             <nav class="navbar navbar-expand-lg navbar-light bg-white">
                 <div class="container-fluid">
-                    <a class="navbar-brand" href="../../">
-                        <img src="../assets/images/ktu logo.png" alt="UniHomes Logo" height="40">
+                    <a class="navbar-brand" href="dashboard.php">
+                        <img src="../assets/images/logo-removebg-preview.png" alt="UniHomes Logo" height="40">
                         <span class="ms-2 fw-bold">Landlords&Tenant</span>
                     </a>
                     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -656,7 +676,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                     <div class="collapse navbar-collapse" id="navbarNav">
                         <ul class="navbar-nav ms-auto">
                             <li class="nav-item">
-                                <a class="nav-link" href="../index.php">Home</a>
+                                <a class="nav-link" href="dashboard.php">Home</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="property_dashboard.php">Properties</a>
@@ -868,9 +888,25 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                                                 <i class="fas fa-bookmark me-1"></i> Book This Room
                                             </button>
                                         <?php else: ?>
-                                            <button class="btn btn-outline-primary btn-sm mt-3" disabled>
-                                                <i class="fas fa-eye me-1"></i> View Details
-                                            </button>
+                                            <div class="d-flex gap-2 mt-3">
+                                                <button class="btn btn-outline-primary btn-sm" 
+                                                        onclick="viewRoomDetails(<?= $room['id'] ?>, '<?= htmlspecialchars($room['room_number']) ?>')"
+                                                        data-bs-toggle="modal" 
+                                                        data-bs-target="#roomDetailsModal">
+                                                    <i class="fas fa-eye me-1"></i> View Details
+                                                </button>
+                                                <button class="btn btn-success btn-sm room-select-btn" 
+                                                        onclick="selectRoomForCashPayment(
+                                                            <?= $room['id'] ?>, 
+                                                            '<?= htmlspecialchars($room['room_number']) ?>', 
+                                                            <?= $room['capacity'] ?>, 
+                                                            '<?= $room['gender'] ?>'
+                                                        )"
+                                                        data-bs-toggle="modal" 
+                                                        data-bs-target="#cashPaymentModal">
+                                                    <i class="fas fa-money-bill-wave me-1"></i> Record Payment
+                                                </button>
+                                            </div>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -1272,6 +1308,149 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             </div>
         </div>
     </div>
+
+
+    <!-- Room Details Modal -->
+    <div class="modal fade" id="roomDetailsModal" tabindex="-1" aria-labelledby="roomDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="roomDetailsModalLabel">
+                        <i class="fas fa-door-open me-2"></i>Room Details
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="roomDetailsContent">
+                        <div class="text-center">
+                            <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+                            <p class="mt-2">Loading room details...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-success" id="selectRoomFromDetails" style="display: none;">
+                        <i class="fas fa-money-bill-wave me-2"></i>Select for Cash Payment
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+     <!-- Cash Payment Modal -->
+    <div class="modal fade" id="cashPaymentModal" tabindex="-1" aria-labelledby="cashPaymentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="cashPaymentModalLabel">
+                        <i class="fas fa-money-bill-wave me-2"></i>Record Cash Payment
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="cashPaymentForm" method="POST" action="process_cash_payment.php">
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Use this form to record a cash payment from a student who has paid you directly.
+                        </div>
+                        
+                        <input type="hidden" name="property_id" value="<?= $property['id'] ?>">
+                        <input type="hidden" id="selectedRoomId" name="room_id" value="">
+                        
+                        <!-- Selected Room Details -->
+                        <div class="mb-4 p-3 border rounded bg-light">
+                            <h6>Selected Room Details</h6>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <p class="mb-1"><strong>Room Number:</strong></p>
+                                    <p id="displayRoomNumber">-</p>
+                                </div>
+                                <div class="col-md-4">
+                                    <p class="mb-1"><strong>Capacity:</strong></p>
+                                    <p id="displayRoomCapacity">-</p>
+                                </div>
+                                <div class="col-md-4">
+                                    <p class="mb-1"><strong>Gender:</strong></p>
+                                    <p id="displayRoomGender">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="studentName" class="form-label">Student Full Name *</label>
+                                <input type="text" class="form-control" id="studentName" name="student_name" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="studentEmail" class="form-label">Student Email *</label>
+                                <input type="email" class="form-control" id="studentEmail" name="student_email" required>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="studentPhone" class="form-label">Student Phone *</label>
+                                <input type="tel" class="form-control" id="studentPhone" name="student_phone" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="studentId" class="form-label">Student ID (Optional)</label>
+                                <input type="text" class="form-control" id="studentId" name="student_id">
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="paymentAmount" class="form-label">Payment Amount (GHS) *</label>
+                                <input type="number" class="form-control" id="paymentAmount" name="amount" 
+                                       step="0.01" min="0" value="<?= number_format($property['price'] / 12, 2) ?>" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="startDate" class="form-label">Move-in Date *</label>
+                                <input type="date" class="form-control" id="startDate" name="start_date" required>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="tenantLocation" class="form-label">Location *</label>
+                                <input type="text" class="form-control" id="tenantLocation" name="tenant_location" required
+                                       placeholder="e.g. Kumasi, Accra, Kade, Oda, etc.">
+                            </div>
+                        </div>
+
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="durationMonths" class="form-label">Duration (Months) *</label>
+                                <select class="form-select" id="durationMonths" name="duration_months" required>
+                                    <option value="">Select duration...</option>
+                                    <option value="1">1 Month</option>
+                                    <option value="3">3 Months</option>
+                                    <option value="6" selected>6 Months</option>
+                                    <option value="9">9 Months</option>
+                                    <option value="12">12 Months</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+
+                        
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Important:</strong> By submitting this form, you confirm that you have received cash payment from the student. 
+                            This will create a booking record and mark it as paid.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-check me-2"></i>Record Payment & Create Booking
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     
     <!-- Delete Property Modal (for owners) -->
     <?php if($is_owner): ?>
@@ -1352,8 +1531,44 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     
     <!-- Leaflet JS for maps -->
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    </script>
+    
+    <!-- Leaflet JS for maps -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     
     <script>
+        // Global variables to store selected room details
+        let selectedRoomId = null;
+        let selectedRoomNumber = null;
+        let selectedRoomCapacity = null;
+        let selectedRoomGender = null;
+        let selectedPropertyName = "<?= htmlspecialchars($property['property_name']) ?>";
+        
+        // Function to update modal with room details
+        function updateCashPaymentModal() {
+            if (selectedRoomId) {
+                document.getElementById('displayRoomNumber').textContent = selectedRoomNumber;
+                document.getElementById('displayRoomCapacity').textContent = selectedRoomCapacity;
+                document.getElementById('displayRoomGender').textContent = selectedRoomGender;
+                
+                // Set hidden input values
+                document.getElementById('selectedRoomId').value = selectedRoomId;
+                
+                // Update modal title
+                document.getElementById('cashPaymentModalLabel').innerHTML = 
+                    `<i class="fas fa-money-bill-wave me-2"></i>Record Cash Payment - ${selectedPropertyName}`;
+            }
+        }
+        
+        // Function to capture room details
+        function selectRoomForCashPayment(roomId, roomNumber, capacity, gender) {
+            selectedRoomId = roomId;
+            selectedRoomNumber = roomNumber;
+            selectedRoomCapacity = capacity;
+            selectedRoomGender = gender;
+            updateCashPaymentModal();
+        }
+
         // Change main image when thumbnail is clicked
         function changeMainImage(element, newSrc) {
             document.getElementById('mainImage').src = newSrc;
@@ -1462,6 +1677,85 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             if (firstChecked) {
                 firstChecked.dispatchEvent(new Event('change'));
             }
+            
+            // Cash Payment Modal functionality
+            const cashPaymentModal = document.getElementById('cashPaymentModal');
+            
+            // When modal is shown, populate with selected room details
+            cashPaymentModal.addEventListener('show.bs.modal', function() {
+                // Set minimum date to today
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById('startDate').min = today;
+                document.getElementById('startDate').value = today;
+                
+                // Update room details
+                updateCashPaymentModal();
+            });
+            
+            // Reset form when modal is hidden
+            cashPaymentModal.addEventListener('hidden.bs.modal', function() {
+                document.getElementById('cashPaymentForm').reset();
+                selectedRoomId = null;
+            });
+            
+            // Handle form submission
+            document.getElementById('cashPaymentForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                if (!selectedRoomId) {
+                    alert('Please select a room first');
+                    return;
+                }
+                
+                // Show loading state
+                const submitButton = this.querySelector('button[type="submit"]');
+                const originalText = submitButton.innerHTML;
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Processing...';
+                
+                // Submit form data
+                const formData = new FormData(this);
+                
+                fetch('process_cash_payment.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Close modal
+                        bootstrap.Modal.getInstance(cashPaymentModal).hide();
+                        
+                        // Show success message with room details
+                        const successMsg = `Payment recorded for Room ${selectedRoomNumber}!\n` +
+                                           `Property: ${selectedPropertyName}\n` +
+                                           `Capacity: ${selectedRoomCapacity} students\n` +
+                                           `Gender: ${selectedRoomGender}`;
+                        alert(successMsg);
+                        
+                        // Optional: Update UI to reflect booked room
+                        const roomCard = document.querySelector(`.room-card:has(button[onclick*="${selectedRoomId}"])`);
+                        if (roomCard) {
+                            roomCard.querySelector('.room-status').textContent = 'Occupied';
+                            roomCard.querySelector('.room-status').className = 'room-status status-occupied';
+                        }
+                        
+                        // Reload page to update room availability
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 3000);
+                    } else {
+                        throw new Error(data.message || 'Failed to process cash payment');
+                    }
+                })
+                .catch(error => {
+                    alert(error.message);
+                })
+                .finally(() => {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalText;
+                });
+            });
         });
     </script>
 </body>

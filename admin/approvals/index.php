@@ -9,17 +9,48 @@ require_once __DIR__ . '../../../config/database.php';
 $database = new Database();
 $pdo = $database->connect();
 
-// Get pending bookings
-$stmt = $pdo->prepare("
-    SELECT b.*, p.property_name, u.username, u.email 
+// Get status filter
+$status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
+
+// Base query for bookings
+$query = "
+    SELECT 
+        b.*, 
+        p.property_name, 
+        p.location AS property_location,
+        pr.room_number,
+        pr.gender AS room_gender,
+        u_student.username AS student_name, 
+        u_student.email AS student_email,
+        u_student.phone_number AS student_phone,
+        u_owner.username AS owner_name,
+        u_owner.email AS owner_email,
+        u_owner.phone_number AS owner_phone,
+        py.amount AS payment_amount,
+        py.status AS payment_status
     FROM bookings b
     JOIN property p ON b.property_id = p.id
-    JOIN users u ON b.user_id = u.id
-    WHERE b.status = 'pending'
-    ORDER BY b.id DESC
-");
+    JOIN users u_student ON b.user_id = u_student.id
+    JOIN users u_owner ON p.owner_id = u_owner.id
+    LEFT JOIN property_rooms pr ON b.room_id = pr.id
+    LEFT JOIN payments py ON b.id = py.booking_id
+";
+
+// Add status filter if not 'all'
+if ($status_filter !== 'all') {
+    $query .= " WHERE b.status = :status";
+}
+
+$query .= " ORDER BY b.booking_date DESC";
+
+$stmt = $pdo->prepare($query);
+
+if ($status_filter !== 'all') {
+    $stmt->bindValue(':status', $status_filter);
+}
+
 $stmt->execute();
-$pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -27,7 +58,7 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pending Approvals - Hostel Admin</title>
+    <title>Booking Management - Hostel Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -163,6 +194,8 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
         }
 
         .card-header h2 {
@@ -181,6 +214,7 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
         table {
             width: 100%;
             border-collapse: collapse;
+            min-width: 1000px;
         }
 
         table th, table td {
@@ -193,6 +227,8 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
             background-color: #f8f9fa;
             color: var(--secondary-color);
             font-weight: 600;
+            position: sticky;
+            top: 0;
         }
 
         table tr:hover {
@@ -210,6 +246,21 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .badge-pending {
             background-color: var(--warning-color);
             color: var(--dark-color);
+        }
+        
+        .badge-confirmed {
+            background-color: var(--info-color);
+            color: white;
+        }
+        
+        .badge-paid {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .badge-cancelled {
+            background-color: var(--accent-color);
+            color: white;
         }
 
         .btn {
@@ -241,6 +292,11 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         .btn-danger {
             background-color: var(--accent-color);
+            color: white;
+        }
+        
+        .btn-info {
+            background-color: var(--info-color);
             color: white;
         }
 
@@ -286,6 +342,15 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 overflow-x: auto;
                 white-space: nowrap;
             }
+            
+            .card-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .filter-section {
+                width: 100%;
+            }
         }
 
         .menu-toggle {
@@ -306,6 +371,7 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .action-buttons {
             display: flex;
             gap: 5px;
+            flex-wrap: wrap;
         }
 
         .user-avatar {
@@ -314,6 +380,47 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
             border-radius: 50%;
             object-fit: cover;
         }
+        
+        .filter-section {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .filter-label {
+            font-weight: 500;
+        }
+        
+        .filter-select {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+        }
+        
+        .export-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .bg-pending { background-color: #fff3cd; color: #856404; }
+        .bg-confirmed { background-color: #cce5ff; color: #004085; }
+        .bg-paid { background-color: #d4edda; color: #155724; }
+        .bg-cancelled { background-color: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
@@ -328,14 +435,10 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <li><a href="../dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
                     <li><a href="../users/"><i class="fas fa-users"></i> User Management</a></li>
                     <li><a href="../properties/"><i class="fas fa-home"></i> Property Management</a></li>
-                    <li><a href="../bookings/"><i class="fas fa-calendar-check"></i> Booking Management</a></li>
-                    <li><a href="index.php" class="active"><i class="fas fa-clock"></i> Pending Approvals</a></li>
-                    <li><a href="approved.php"><i class="fas fa-check-circle"></i> Approved Bookings</a></li>
-                    <li><a href="rejected.php"><i class="fas fa-times-circle"></i> Rejected Bookings</a></li>
+                    <li><a href="index.php" class="active"><i class="fas fa-calendar-check"></i> Booking Management</a></li>
                     <li><a href="../payments/"><i class="fas fa-money-bill-wave"></i> Payments</a></li>
                     <li><a href="../reports/financial.php"><i class="fas fa-chart-line"></i> Financial Reports</a></li>
                     <li><a href="../reports/occupancy.php"><i class="fas fa-bed"></i> Occupancy Reports</a></li>
-                    <li><a href="../settings/"><i class="fas fa-cog"></i> Settings</a></li>
                     <li>
                         <form action="../logout.php" method="POST">
                           <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
@@ -363,25 +466,39 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             <!-- Page Header -->
             <div class="page-header">
-                <h1>Pending Approvals</h1>
+                <h1>Booking Management</h1>
                 <ul class="breadcrumb">
                     <li><a href="../dashboard.php">Home</a></li>
-                    <li>Pending Approvals</li>
+                    <li>Bookings</li>
                 </ul>
             </div>
 
-            <!-- Pending Bookings Table -->
+            <!-- Bookings Table -->
             <div class="card">
                 <div class="card-header">
-                    <h2>Bookings Awaiting Approval</h2>
-                    <span class="badge badge-pending"><?php echo count($pendingBookings); ?> Pending</span>
+                    <h2>All Bookings</h2>
+                    <div class="filter-section">
+                        <div class="filter-group">
+                            <span class="filter-label">Status:</span>
+                            <select class="filter-select" id="statusFilter" onchange="filterBookings()">
+                                <option value="all" <?= $status_filter === 'all' ? 'selected' : '' ?>>All Bookings</option>
+                                <option value="pending" <?= $status_filter === 'pending' ? 'selected' : '' ?>>Pending</option>
+                                <option value="confirmed" <?= $status_filter === 'confirmed' ? 'selected' : '' ?>>Confirmed</option>
+                                <option value="paid" <?= $status_filter === 'paid' ? 'selected' : '' ?>>Paid</option>
+                                <option value="cancelled" <?= $status_filter === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+                            </select>
+                        </div>
+                        <a href="export_bookings.php?status=<?= $status_filter ?>" class="btn btn-primary export-btn">
+                            <i class="fas fa-file-export"></i> Export to Excel
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <?php if (empty($pendingBookings)): ?>
+                    <?php if (empty($bookings)): ?>
                         <div class="empty-state">
-                            <i class="fas fa-check-circle"></i>
-                            <h3>No Pending Approvals</h3>
-                            <p>All bookings have been processed.</p>
+                            <i class="fas fa-calendar-times"></i>
+                            <h3>No Bookings Found</h3>
+                            <p>There are no bookings matching your criteria.</p>
                         </div>
                     <?php else: ?>
                         <div class="table-responsive">
@@ -390,43 +507,108 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <tr>
                                         <th>Booking ID</th>
                                         <th>Property</th>
-                                        <th>Guest</th>
+                                        <th>Room</th>
+                                        <th>Student</th>
+                                        <th>Owner</th>
                                         <th>Dates</th>
-                                        <th>Nights</th>
+                                        <th>Duration</th>
                                         <th>Amount</th>
                                         <th>Status</th>
+                                        <th>Payment</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($pendingBookings as $booking): ?>
+                                    <?php foreach($bookings as $booking): ?>
                                     <tr>
-                                        <td>#<?php echo $booking['id']; ?></td>
-                                        <td><?php echo htmlspecialchars($booking['property_name']); ?></td>
+                                        <td>#<?= $booking['id'] ?></td>
                                         <td>
-                                            <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($booking['username']); ?>&background=random" alt="User" class="user-avatar">
-                                            <?php echo htmlspecialchars($booking['username']); ?>
+                                            <?= htmlspecialchars($booking['property_name']) ?>
+                                            <div class="small text-muted"><?= htmlspecialchars($booking['property_location']) ?></div>
                                         </td>
                                         <td>
-                                            <?php echo date('M j, Y', strtotime($booking['start_date'])); ?> - 
-                                            <?php echo date('M j, Y', strtotime($booking['end_date'])); ?>
+                                            <?php if (!empty($booking['room_number'])): ?>
+                                                Room <?= htmlspecialchars($booking['room_number']) ?>
+                                                <div class="small">
+                                                    <?= ucfirst($booking['room_gender']) ?? 'N/A' ?>
+                                                </div>
+                                            <?php else: ?>
+                                                N/A
+                                            <?php endif; ?>
                                         </td>
-                                        <td><?php echo round((strtotime($booking['end_date']) - strtotime($booking['start_date'])) / (60 * 60 * 24)); ?></td>
-                                        <td>$<?php echo number_format($booking['total_amount'], 2); ?></td>
-                                        <td><span class="badge badge-pending">Pending</span></td>
+                                        <td>
+                                            <div class="font-weight-bold"><?= htmlspecialchars($booking['student_name']) ?></div>
+                                            <div class="small"><?= htmlspecialchars($booking['student_email']) ?></div>
+                                            <div class="small"><?= htmlspecialchars($booking['student_phone']) ?></div>
+                                        </td>
+                                        <td>
+                                            <div class="font-weight-bold"><?= htmlspecialchars($booking['owner_name']) ?></div>
+                                            <div class="small"><?= htmlspecialchars($booking['owner_email']) ?></div>
+                                            <div class="small"><?= htmlspecialchars($booking['owner_phone']) ?></div>
+                                        </td>
+                                        <td>
+                                            <?= date('M j, Y', strtotime($booking['start_date'])) ?> - 
+                                            <?= date('M j, Y', strtotime($booking['end_date'])) ?>
+                                        </td>
+                                        <td><?= $booking['duration_months'] ?> months</td>
+                                        <td>
+                                            <?php if ($booking['payment_amount']): ?>
+                                                GHS <?= number_format($booking['payment_amount'], 2) ?>
+                                            <?php else: ?>
+                                                -
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php 
+                                                $status_class = '';
+                                                switch ($booking['status']) {
+                                                    case 'pending': $status_class = 'bg-pending'; break;
+                                                    case 'confirmed': $status_class = 'bg-confirmed'; break;
+                                                    case 'paid': $status_class = 'bg-paid'; break;
+                                                    case 'cancelled': $status_class = 'bg-cancelled'; break;
+                                                }
+                                            ?>
+                                            <span class="status-badge <?= $status_class ?>">
+                                                <?= ucfirst($booking['status']) ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <?php if ($booking['payment_status']): ?>
+                                                <span class="status-badge <?= $booking['payment_status'] === 'completed' ? 'bg-paid' : 'bg-pending' ?>">
+                                                    <?= ucfirst($booking['payment_status']) ?>
+                                                </span>
+                                            <?php else: ?>
+                                                -
+                                            <?php endif; ?>
+                                        </td>
                                         <td class="action-buttons">
-                                            <form action="approve.php" method="post" style="display: inline;">
-                                                <input type="hidden" name="booking_id" value="<?php echo $booking['id']; ?>">
-                                                <button type="submit" class="btn btn-success btn-sm">
-                                                    <i class="fas fa-check"></i> Approve
-                                                </button>
-                                            </form>
-                                            <form action="reject.php" method="post" style="display: inline;">
-                                                <input type="hidden" name="booking_id" value="<?php echo $booking['id']; ?>">
-                                                <button type="submit" class="btn btn-danger btn-sm">
-                                                    <i class="fas fa-times"></i> Reject
-                                                </button>
-                                            </form>
+                                            <?php if ($booking['status'] == 'pending'): ?>
+                                                <form action="approve.php" method="post" style="display: inline;">
+                                                    <input type="hidden" name="booking_id" value="<?= $booking['id'] ?>">
+                                                    <button type="submit" class="btn btn-success btn-sm">
+                                                        <i class="fas fa-check"></i> Approve
+                                                    </button>
+                                                </form>
+                                                <form action="reject.php" method="post" style="display: inline;">
+                                                    <input type="hidden" name="booking_id" value="<?= $booking['id'] ?>">
+                                                    <button type="submit" class="btn btn-danger btn-sm">
+                                                        <i class="fas fa-times"></i> Reject
+                                                    </button>
+                                                </form>
+                                            <?php else: ?>
+                                                <a href="view.php?id=<?= $booking['id'] ?>" class="btn btn-info btn-sm">
+                                                    <i class="fas fa-eye"></i> View
+                                                </a>
+                                            <?php endif; ?>
+                                            
+                                            <?php if ($booking['status'] !== 'cancelled'): ?>
+                                                <form action="cancel.php" method="post" style="display: inline;">
+                                                    <input type="hidden" name="booking_id" value="<?= $booking['id'] ?>">
+                                                    <button type="submit" class="btn btn-outline btn-sm">
+                                                        <i class="fas fa-ban"></i> Cancel
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                     <?php endforeach; ?>
@@ -444,6 +626,12 @@ $pendingBookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
         document.getElementById('menuToggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('active');
         });
+        
+        // Filter bookings by status
+        function filterBookings() {
+            const status = document.getElementById('statusFilter').value;
+            window.location.href = `?status=${status}`;
+        }
     </script>
 </body>
 </html>

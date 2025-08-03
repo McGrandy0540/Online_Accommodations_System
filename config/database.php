@@ -6,9 +6,9 @@ define('PAYSTACK_PUBLIC_KEY', 'pk_test_db73c7228ff880b4a3d49593023b91a6a5b923c6'
 define('PAYSTACK_CURRENCY', 'GHS');
 
 class Database {
-    private $host = 'sql211.infinityfree.com';
-    private $db_name = 'if0_39582071_online_accommodation';
-    private $username = 'if0_39582071';
+    private $host = 'localhost';
+    private $db_name = 'online_accommodations_system';
+    private $username = 'root';
     private $password = 'mcgrandy0408';
     private $conn;
 
@@ -38,7 +38,7 @@ class Database {
             error_log("Database Connection Error: " . $e->getMessage());
             
             // Display user-friendly message
-            die("We're experiencing technical difficulties. Please try again later.");
+            die("Database Connection Error: " . $e->getMessage());
         }
 
         return $this->conn;

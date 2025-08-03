@@ -8,8 +8,6 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 use PHPMailer\PHPMailer\SMTP;
 
-require_once __DIR__ . '../../vendor/autoload.php'; // Ensure Composer autoload is included
-
 class EmailService {
     private $mail;
     private $debug_mode;
@@ -83,86 +81,28 @@ class EmailService {
             throw new Exception("Email service initialization failed");
         }
     }
-
-
-       /**
-     * Send announcement email to a user
-     */
-    public function sendAnnouncement($recipientEmail, $subject, $message) {
-        try {
-            // Clear previous recipients and attachments
-            $this->mail->clearAddresses();
-            $this->mail->clearReplyTos();
-            $this->mail->clearAttachments();
-
-            // Validate recipient email
-            if (empty($recipientEmail) || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
-                return [
-                    'success' => false,
-                    'message' => 'Recipient email address is missing or invalid.',
-                    'debug' => $this->debug_mode ? 'Recipient email: ' . $recipientEmail : null
-                ];
-            }
-
-            // Set sender
-            $this->mail->setFrom(DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME);
-
-            // Set recipient
-            $this->mail->addAddress($recipientEmail);
-
-            // Email content
-            $this->mail->isHTML(true);
-            $this->mail->Subject = $subject;
-            $this->mail->Body = nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8'));
-            $this->mail->AltBody = $message;
-
-            // Send email with retry logic
-            $sendResult = $this->sendWithRetry();
-
-            if ($sendResult['success']) {
-                // Optionally log the announcement email
-                return $sendResult;
-            } else {
-                return $sendResult;
-            }
-        } catch (Exception $e) {
-            $error_message = $e->getMessage();
-            return [
-                'success' => false,
-                'message' => 'Announcement email failed: ' . $error_message,
-                'debug' => $this->debug_mode ? $error_message : null
-            ];
-        }
-    }
     
     /**
      * Send contact form email to admin
      */
     public function sendContactFormEmail($name, $email, $subject, $message) {
         try {
-        // Clear any previous recipients
-        $this->mail->clearAddresses();
-        $this->mail->clearReplyTos();
-        $this->mail->clearAttachments();
-
-        // Get admin email
-        $admin_email = EmailHelper::getAdminEmail();
-
-        // Validate admin email
-        if (empty($admin_email) || !filter_var($admin_email, FILTER_VALIDATE_EMAIL)) {
-            return [
-                'success' => false,
-                'message' => 'Admin email address is missing or invalid.',
-                'debug' => $this->debug_mode ? 'Admin email: ' . $admin_email : null
-            ];
-        }
-
-        // Set sender
-        $this->mail->setFrom(DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME);
-        $this->mail->addReplyTo($email, $name);
-
-        // Set recipient
-        $this->mail->addAddress($admin_email);
+            // Clear any previous recipients
+            $this->mail->clearAddresses();
+            $this->mail->clearReplyTos();
+            $this->mail->clearAttachments();
+            
+            // Get admin email
+            $admin_email = EmailHelper::getAdminEmail();
+            
+            // Set sender
+            $this->mail->setFrom(DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME);
+            $this->mail->addReplyTo($email, $name);
+            
+            
+            // Set recipient
+            $this->mail->addAddress($admin_email);
+            
             // Email content
             $this->mail->isHTML(true);
             $this->mail->Subject = "New Contact Message: " . ($subject ?: "No Subject");
@@ -203,24 +143,15 @@ class EmailService {
      */
     public function sendConfirmationEmail($name, $email, $message) {
         try {
-  // Clear any previous recipients
-        $this->mail->clearAddresses();
-        $this->mail->clearReplyTos();
-
-        // Validate user email
-        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return [
-                'success' => false,
-                'message' => 'Recipient email address is missing or invalid.',
-                'debug' => $this->debug_mode ? 'Recipient email: ' . $email : null
-            ];
-        }
-
-        // Set sender
-        $this->mail->setFrom(DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME);
-
-        // Set recipient
-        $this->mail->addAddress($email, $name);
+            // Clear any previous recipients
+            $this->mail->clearAddresses();
+            $this->mail->clearReplyTos();
+            
+            // Set sender
+            $this->mail->setFrom(DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME);
+            
+            // Set recipient
+            $this->mail->addAddress($email, $name);
             
             // Email content
             $this->mail->isHTML(true);
@@ -309,7 +240,7 @@ class EmailService {
                     </div>
                 </div>
                 <div class='footer'>
-                    <p>This message was sent through the Landlords&Tenants contact form.</p>
+                    <p>This message was sent through the Landlords&Tenant contact form.</p>
                     <p>Please reply directly to {$safe_email} to respond to this inquiry.</p>
                 </div>
             </div>
@@ -337,7 +268,7 @@ Received: {$current_time}
 IP Address: {$ip_address}
 
 ---
-This message was sent through the Landlords&Tenants contact form.
+This message was sent through the Landlords&Tenant contact form.
 Please reply directly to {$email} to respond to this inquiry.
         ";
     }
@@ -354,7 +285,7 @@ Please reply directly to {$email} to respond to this inquiry.
         <html>
         <head>
             <meta charset='UTF-8'>
-            <title>Thank you for contacting Landlords&Tenants</title>
+            <title>Thank you for contacting Landlords&Tenant</title>
             <style>
                 body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
                 .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -384,8 +315,8 @@ Please reply directly to {$email} to respond to this inquiry.
                     </div>
                 </div>
                 <div class='footer'>
-                    <p>Thank you for choosing Landlords&Tenant!</p>
-                    <p>Your trusted partner for online accommodation solutions.</p>
+                    <p>Thank you for choosing Landlords&Tenants!</p>
+                    <p>Your trusted partner for Online accommodation solutions.</p>
                 </div>
             </div>
         </body>

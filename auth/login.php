@@ -120,7 +120,7 @@ function logFailedAttempt($email, $ipAddress) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | University Accommodation System</title>
+    <title>Login | Landlords&Tenants</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -429,7 +429,7 @@ function logFailedAttempt($email, $ipAddress) {
     <!-- Header -->
     <header>
         <div class="container header-container">
-            <a href="../index.php" class="logo">Uni<span>Homes</span></a>
+            <a href="../index.php" class="logo">Landlords<span>&Tenants</span></a>
         </div>
     </header>
 
@@ -501,7 +501,7 @@ function logFailedAttempt($email, $ipAddress) {
     <!-- Footer -->
     <footer>
         <div class="container">
-            <p>&copy; <?php echo date('Y'); ?> University Accommodation System. All rights reserved.</p>
+            <p>&copy; <?php echo date('Y'); ?> Landlords&Tenants. All rights reserved.</p>
             <p><a href="../index.php">Return to homepage</a></p>
         </div>
     </footer>

@@ -529,8 +529,8 @@ $unread_notifications = $notifications_stmt->fetchAll();
     <header class="main-header">
         <div class="header-container">
             <a href="../../" class="logo">
-                <img src="../assets/images/ktu logo.png" alt="UniHomes Logo">
-                <span>Landlords&Tenant</span>
+                <img src="../assets/images/ktu logo.png" alt="landlords&tenants Logo">
+                <span>landlords&tenants</span>
             </a>
             
             <button class="menu-toggle" id="menuToggle">

@@ -183,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Profile - UniHomes</title>
+    <title>My Profile - Landlords&Tenant</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/profile.css">
@@ -658,8 +658,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
             <div class="profile-content">
                 <div class="nav-tabs">
                     <div class="nav-tab active" data-tab="profile">Profile</div>
-                    <div class="nav-tab" data-tab="bookings">My Bookings</div>
-                    <div class="nav-tab" data-tab="payments">Payments</div>
                     <div class="nav-tab" data-tab="reviews">My Reviews</div>
                     <div class="nav-tab" data-tab="security">Security</div>
                 </div>

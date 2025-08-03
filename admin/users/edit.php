@@ -535,11 +535,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <form method="POST" action="edit.php?id=<?php echo $userId; ?>" enctype="multipart/form-data">
                 <div class="profile-picture-container">
                     <?php if (!empty($user['profile_picture'])): ?>
-                        <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>" 
-                             alt="Profile Picture" 
-                             class="profile-picture"
-                             data-initial="<?php echo htmlspecialchars($userInitial); ?>"
-                             onerror="this.onerror=null; this.parentNode.innerHTML='<div class=\'avatar-initials\'>'+this.getAttribute(\'data-initial\')+'<\/div>'">
+                        <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>"
+                        alt="Profile Picture"
+                        class="profile-picture"
+                        data-initial="<?php echo htmlspecialchars($userInitial); ?>">
                     <?php else: ?>
                         <div class="avatar-initials">
                             <?php echo $userInitial; ?>
@@ -690,6 +689,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.getElementById('profile_picture').addEventListener('change', function(e) {
             const fileName = e.target.files[0] ? e.target.files[0].name : 'No file chosen';
             document.getElementById('file-name').textContent = fileName;
+        });
+        
+        // Handle image loading errors
+        document.querySelectorAll('.profile-picture').forEach(img => {
+            img.addEventListener('error', function() {
+                const initial = this.getAttribute('data-initial');
+                const avatarDiv = document.createElement('div');
+                avatarDiv.className = 'avatar-initials';
+                avatarDiv.textContent = initial;
+                this.parentNode.replaceChild(avatarDiv, this);
+            });
         });
     </script>
 </body>
