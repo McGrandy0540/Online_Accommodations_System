@@ -7,248 +7,196 @@ session_start([
     'cookie_samesite' => 'Strict'
 ]);
 
-header('Content-Type: application/json');
-require '../config/database.php';
+require  '../config/database.php';
+require  '../config/constants.php';
 
+header('Content-Type: application/json');
+
+// Initialize response array
 $response = ['success' => false, 'message' => ''];
 
 try {
-    // Get raw POST data
-    $json = file_get_contents('php://input');
-    $data = json_decode($json, true);
-
-    // Validate required fields
+    // Get JSON input
+    $input = json_decode(file_get_contents('php://input'), true);
     if (json_last_error() !== JSON_ERROR_NONE) {
-        throw new Exception("Invalid JSON data received", 400);
+        throw new Exception("Invalid JSON data", 400);
     }
 
-    if (!isset($data['reference']) || empty(trim($data['reference']))) {
-        throw new Exception("Missing payment reference", 400);
+    // Validate required fields with proper type checks
+    $required = ['reference', 'amount', 'pending_rooms', 'expired_rooms', 'discount'];
+    foreach ($required as $field) {
+        if (!isset($input[$field])) {
+            throw new Exception("Missing required field: $field", 400);
+        }
+        
+        // Special handling for reference field
+        if ($field === 'reference') {
+            if (empty(trim($input[$field]))) {
+                throw new Exception("Reference cannot be empty", 400);
+            }
+        } 
+        // Numeric fields validation
+        else if (!is_numeric($input[$field])) {
+            throw new Exception("Invalid value for field: $field", 400);
+        }
     }
 
-    $reference = trim($data['reference']);
-    $owner_id = $_SESSION['user_id'] ?? null;
+    $reference = trim($input['reference']);
+    $amount = (float)$input['amount'];
+    $pending_rooms = (int)$input['pending_rooms'];
+    $expired_rooms = (int)$input['expired_rooms'];
+    $discount = (float)$input['discount'];
+    
+    // Ensure we have a valid session
+    if (empty($_SESSION['user_id'])) {
+        throw new Exception("Session expired - please login again", 401);
+    }
+    
+    $owner_id = $_SESSION['user_id'];
 
-    if (!$owner_id) {
-        throw new Exception("User session expired. Please login again.", 401);
+    if ($amount <= 0) {
+        throw new Exception("Invalid payment amount", 400);
     }
 
-    // Verify Paystack transaction
-    $ch = curl_init();
-    curl_setopt_array($ch, [
+    // Configure SSL for cURL
+    $sslOptions = [
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ];
+    
+    // Windows-specific certificate path
+    $caBundle = 'C:\\xampp\\php\\extras\\ssl\\cacert.pem';
+    
+    if (file_exists($caBundle)) {
+        $sslOptions[CURLOPT_CAINFO] = $caBundle;
+    } else {
+        // Fallback to insecure method if certificate not found
+        $sslOptions = [
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
+        ];
+        error_log("CA bundle not found at: $caBundle");
+    }
+
+    // Verify payment with Paystack API
+    $curl = curl_init();
+    $curlOptions = [
         CURLOPT_URL => "https://api.paystack.co/transaction/verify/" . rawurlencode($reference),
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             "Authorization: Bearer " . PAYSTACK_SECRET_KEY,
-            "Cache-Control: no-cache"
+            "Cache-Control: no-cache",
         ],
-        CURLOPT_TIMEOUT => 30,
-    ]);
-    
-    $paystackResponse = curl_exec($ch);
-    $curlError = curl_error($ch);
-    $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    ] + $sslOptions;
 
-    if ($curlError) {
-        throw new Exception("Payment verification connection failed: " . $curlError, 503);
-    }
+    curl_setopt_array($curl, $curlOptions);
 
-    if ($httpStatus !== 200) {
-        throw new Exception("Payment verification service unavailable (HTTP $httpStatus)", 503);
+    $paystackResponse = curl_exec($curl);
+    $err = curl_error($curl);
+    $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+    curl_close($curl);
+
+    if ($err) {
+        throw new Exception("cURL Error: " . $err, 500);
     }
 
     $result = json_decode($paystackResponse);
-    if (!$result || json_last_error() !== JSON_ERROR_NONE) {
-        throw new Exception("Invalid payment verification response", 500);
+    if (!$result || !isset($result->status)) {
+        throw new Exception("Invalid response from Paystack API. HTTP Code: $httpCode", 500);
     }
 
-    if (!$result->status || $result->data->status !== 'success') {
-        throw new Exception("Payment verification failed: " . ($result->message ?? 'Unknown error'), 402);
+    if (!$result->status) {
+        $errorMsg = $result->message ?? 'Unknown error';
+        if (isset($result->data)) {
+            $errorMsg .= " - " . ($result->data->message ?? json_encode($result->data));
+        }
+        throw new Exception("Paystack API error: $errorMsg", 500);
     }
 
-    // Get payment amount from Paystack response
-    $amount_paid = $result->data->amount / 100; // Convert from kobo to GHS
+    if ($result->data->status !== 'success') {
+        throw new Exception("Payment failed: " . $result->data->gateway_response, 400);
+    }
 
-    // Database operations
+    // Verify payment amount
+    $expectedAmount = $amount * 100; // Convert to kobo
+    if ($result->data->amount != $expectedAmount) {
+        throw new Exception("Amount mismatch: expected {$expectedAmount}, got {$result->data->amount}", 400);
+    }
+
+    // Get database connection
     $pdo = Database::getInstance();
     $pdo->beginTransaction();
 
     try {
-        // 1. Check if payment already exists to prevent duplicate processing
-        $check_stmt = $pdo->prepare("SELECT id FROM room_levy_payments WHERE transaction_id = ?");
-        $check_stmt->execute([$reference]);
-        
-        if ($check_stmt->rowCount() > 0) {
-            throw new Exception("This payment has already been processed", 409);
-        }
-
-        // 2. Count pending and expired rooms for this owner
-        $count_stmt = $pdo->prepare("
-            SELECT 
-                SUM(CASE WHEN pr.levy_payment_status = 'pending' AND (pr.levy_expiry_date IS NULL OR pr.levy_expiry_date < CURDATE()) THEN 1 ELSE 0 END) as pending_rooms,
-                SUM(CASE WHEN pr.levy_expiry_date IS NOT NULL AND pr.levy_expiry_date < CURDATE() THEN 1 ELSE 0 END) as expired_rooms
-            FROM property_rooms pr
-            JOIN property p ON pr.property_id = p.id
-            WHERE p.owner_id = ?
-        ");
-        $count_stmt->execute([$owner_id]);
-        $counts = $count_stmt->fetch();
-        
-        $pending_rooms = $counts['pending_rooms'] ?? 0;
-        $expired_rooms = $counts['expired_rooms'] ?? 0;
-        $total_rooms = $pending_rooms + $expired_rooms;
-
-        // 3. Create payment record in room_levy_payments table
+        // Create room levy payment record
         $payment_stmt = $pdo->prepare("
             INSERT INTO room_levy_payments (
-                owner_id, 
-                payment_reference, 
-                amount, 
-                transaction_id, 
-                payment_method, 
-                status, 
+                owner_id,
+                payment_reference,
+                amount,
+                transaction_id,
+                payment_method,
+                status,
                 room_count,
-                payment_date,
-                processed_at,
-                duration_days
-            ) VALUES (?, ?, ?, ?, 'paystack', 'completed', ?, NOW(), NOW(), 365)
+                payment_date
+            ) VALUES (?, ?, ?, ?, 'paystack', 'completed', ?, NOW())
         ");
+        
+        $room_count = $pending_rooms + $expired_rooms;
         $payment_stmt->execute([
             $owner_id,
             $reference,
-            $amount_paid,
+            $amount,
             $reference,
-            $total_rooms
+            $room_count
         ]);
         
         $payment_id = $pdo->lastInsertId();
 
-        // 4. Update all pending/expired rooms to paid status
-        if ($total_rooms > 0) {
-            $update_stmt = $pdo->prepare("
-                UPDATE property_rooms pr
-                JOIN property p ON pr.property_id = p.id
-                SET 
-                    pr.levy_payment_status = 'paid',
-                    pr.levy_payment_id = ?,
-                    pr.transaction_id = ?,
-                    pr.payment_date = NOW(),
-                    pr.payment_amount = ? / ?,
-                    pr.last_renewal_date = IF(pr.levy_payment_status = 'approved', NOW(), NULL)
-                WHERE 
-                    p.owner_id = ? AND 
-                    (
-                        (pr.levy_payment_status = 'pending' AND (pr.levy_expiry_date IS NULL OR pr.levy_expiry_date < CURDATE())) OR 
-                        (pr.levy_expiry_date IS NOT NULL AND pr.levy_expiry_date < CURDATE())
-                    )
-            ");
-            $update_stmt->execute([
-                $payment_id,
-                $reference,
-                $amount_paid,
-                $total_rooms,
-                $owner_id
-            ]);
-            
-            $affected_rooms = $update_stmt->rowCount();
-        } else {
-            $affected_rooms = 0;
-        }
-
-        // 5. Record payment in room_levy_payment_history for each room
-        if ($affected_rooms > 0) {
-            $history_stmt = $pdo->prepare("
-                INSERT INTO room_levy_payment_history (
-                    room_id, 
-                    payment_id, 
-                    payment_date, 
-                    expiry_date, 
-                    amount, 
-                    status
+        // Update rooms status (both pending AND expired rooms)
+        $update_stmt = $pdo->prepare("
+            UPDATE property_rooms pr
+            JOIN property p ON pr.property_id = p.id
+            SET 
+                pr.levy_payment_status = 'paid',
+                pr.levy_payment_id = ?,
+                pr.payment_date = NOW(),
+                pr.transaction_id = ?,
+                pr.payment_amount = 50.00
+            WHERE 
+                p.owner_id = ? 
+                AND (
+                    (pr.levy_payment_status = 'pending' AND (pr.levy_expiry_date IS NULL OR pr.levy_expiry_date < CURDATE()))
+                    OR (pr.levy_expiry_date IS NOT NULL AND pr.levy_expiry_date < CURDATE())
                 )
-                SELECT 
-                    pr.id,
-                    ?,
-                    NOW(),
-                    DATE_ADD(CURDATE(), INTERVAL 1 YEAR),
-                    ? / ?,
-                    'active'
-                FROM property_rooms pr
-                JOIN property p ON pr.property_id = p.id
-                WHERE p.owner_id = ? AND pr.levy_payment_id = ?
-            ");
-            $history_stmt->execute([
-                $payment_id,
-                $amount_paid,
-                $total_rooms,
-                $owner_id,
-                $payment_id
-            ]);
-        }
-
-        // 6. Create notification for admin to approve the rooms
-        $admin_notification_stmt = $pdo->prepare("
-            INSERT INTO notifications (
-                user_id,
-                message,
-                type,
-                notification_type,
-                created_at
-            ) 
-            SELECT 
-                id,
-                ?,
-                'payment_received',
-                'in_app',
-                NOW()
-            FROM users
-            WHERE status = 'admin'
         ");
-        
-        $owner_stmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
-        $owner_stmt->execute([$owner_id]);
-        $owner = $owner_stmt->fetch();
-        
-        $notification_message = sprintf(
-            "Room levy payment received from %s for %d rooms (GHS %.2f). Reference: %s",
-            $owner['username'],
-            $affected_rooms,
-            $amount_paid,
-            $reference
-        );
-        
-        $admin_notification_stmt->execute([$notification_message]);
-        
+        $update_stmt->execute([$payment_id, $reference, $owner_id]);
+
+        // Commit transaction
         $pdo->commit();
 
-        // Clear any existing payment session data
-        unset($_SESSION['room_payment']);
-
-        // Success response
         $response = [
             'success' => true,
+            'message' => 'Payment verified and processed successfully',
             'reference' => $reference,
-            'amount_paid' => $amount_paid,
-            'rooms_paid' => $affected_rooms,
             'payment_id' => $payment_id,
-            'message' => $affected_rooms > 0 
-                ? 'Payment processed successfully. ' . $affected_rooms . ' rooms marked as paid and awaiting admin approval.'
-                : 'Payment processed successfully. No rooms needed payment.'
+            'updated_rooms' => $update_stmt->rowCount(),
+            'pending_rooms' => $pending_rooms,
+            'expired_rooms' => $expired_rooms
         ];
 
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         $pdo->rollBack();
-        throw new Exception("Database operation failed: " . $e->getMessage(), 500);
+        throw $e;
     }
 
 } catch (Exception $e) {
     $response = [
         'success' => false,
         'message' => $e->getMessage(),
-        'error_code' => $e->getCode() ?: 'PAYMENT_ERROR'
+        'error_code' => $e->getCode()
     ];
-    http_response_code(is_int($e->getCode()) ? $e->getCode() : 500);
+    http_response_code($e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500);
 }
 
 ob_end_clean();

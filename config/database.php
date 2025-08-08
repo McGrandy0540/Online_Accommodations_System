@@ -1,10 +1,5 @@
 <?php
 
-// Paystack configuration
-define('PAYSTACK_SECRET_KEY', 'sk_test_9c3c7da0284defbf21404dd3faa9cc15ed571d8e');
-define('PAYSTACK_PUBLIC_KEY', 'pk_test_db73c7228ff880b4a3d49593023b91a6a5b923c6');
-define('PAYSTACK_CURRENCY', 'GHS');
-
 class Database {
     private $host = 'localhost';
     private $db_name = 'online_accommodations_system';
@@ -12,9 +7,6 @@ class Database {
     private $password = 'mcgrandy0408';
     private $conn;
 
-    
-
-    
     // Database connection
     public function connect() {
         $this->conn = null;
@@ -37,8 +29,8 @@ class Database {
             // Log error to file in production
             error_log("Database Connection Error: " . $e->getMessage());
             
-            // Display user-friendly message
-            die("Database Connection Error: " . $e->getMessage());
+            // Throw exception instead of die() to allow proper error handling
+            throw new Exception("Database Connection Error: " . $e->getMessage());
         }
 
         return $this->conn;
@@ -53,7 +45,4 @@ class Database {
         return $instance->connect();
     }
 }
-
-// Usage example:
-// $db = Database::getInstance();
 ?>

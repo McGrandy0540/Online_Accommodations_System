@@ -6,7 +6,9 @@ session_start([
     'cookie_httponly' => true,
     'cookie_samesite' => 'Strict'
 ]);
+
 require '../config/database.php';
+require '../config/constants.php';
 
 // Enable error reporting
 ini_set('display_errors', 1);
@@ -18,8 +20,7 @@ try {
     if (!isset($_SESSION['user_id'], $_SESSION['status'])) {
         throw new Exception("Access denied - authorization required");
     }
-    
-    // Validate transaction reference
+
     $transaction_id = $_GET['reference'] ?? null;
     if (!$transaction_id) {
         throw new Exception("Missing transaction reference");
@@ -28,13 +29,14 @@ try {
     $user_id = $_SESSION['user_id'];
     $pdo = Database::getInstance();
 
+
     // Verify transaction with Paystack
     $ch = curl_init();
     curl_setopt_array($ch, [
         CURLOPT_URL => "https://api.paystack.co/transaction/verify/".rawurlencode($transaction_id),
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
-            "Authorization: Bearer ".PAYSTACK_SECRET_KEY,
+            "Authorization: Bearer ".PAYSTACK_PUBLIC_KEY,
             "Cache-Control: no-cache"
         ],
     ]);
@@ -129,7 +131,7 @@ try {
     }
 
     // Clear any payment session data
-    unset($_SESSION['room_levy_payment']);
+    unset($_SESSION['room_payment']);
 
 } catch (Exception $e) {
     error_log("Payment Error: " . $e->getMessage());
@@ -385,14 +387,7 @@ ob_end_flush();
                                 </p>
                             <?php endif; ?>
                         <?php else: ?>
-                            <p class="flex items-start">
-                                <i class="fas fa-envelope mt-1 mr-3"></i>
-                                <span>The property owner will contact you to confirm your booking details.</span>
-                            </p>
-                            <p class="flex items-start">
-                                <i class="fas fa-key mt-1 mr-3"></i>
-                                <span>You'll receive digital keys for your room on your move-in date.</span>
-                            </p>
+                           
                         <?php endif; ?>
                         <p class="flex items-start">
                             <i class="fas fa-check-circle mt-1 mr-3"></i>
@@ -407,11 +402,6 @@ ob_end_flush();
                         <a href="property_dashboard.php" 
                            class="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center">
                             <i class="fas fa-home mr-2"></i> View Properties
-                        </a>
-                    <?php else: ?>
-                        <a href="property_listing.php" 
-                           class="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center">
-                            <i class="fas fa-search mr-2"></i> Browse More Properties
                         </a>
                     <?php endif; ?>
                     <a href="dashboard.php" 

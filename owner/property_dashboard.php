@@ -2,6 +2,7 @@
 // owner/property_dashboard.php - Property Owner Dashboard
 session_start();
 require_once '../config/database.php';
+require_once '../config/constants.php';
 
 // Check if user is property owner
 if ($_SESSION['status'] !== 'property_owner') {
@@ -70,25 +71,7 @@ if (($total_pending_payment_rooms + $total_expired_rooms) > 10) {
     $total_amount_due -= $discount;
 }
 
-// Process Paystack payment if form submitted
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pay_now'])) {
-    $reference = 'ROOM_' . time() . '_' . bin2hex(random_bytes(4));
-    
-    // Store payment data in session
-    $_SESSION['room_payment'] = [
-        'owner_id' => $owner_id,
-        'amount' => $total_amount_due,
-        'reference' => $reference,
-        'pending_rooms' => $total_pending_payment_rooms,
-        'expired_rooms' => $total_expired_rooms,
-        'discount' => $discount,
-        'admin_phone' => $admin_phone
-    ];
-    
-    // Redirect to Paystack
-    header("Location: process_room_payment.php");
-    exit();
-}
+
 
 // Get profile picture path
 function getProfilePicturePath($path) {
@@ -1323,6 +1306,11 @@ $earnings = $earnings_stmt->fetch();
     <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
+    <!-- Load scripts in correct order -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
+    
     <script>
         // Toggle sidebar on mobile
         document.getElementById('menuToggle').addEventListener('click', function() {
@@ -1340,155 +1328,162 @@ $earnings = $earnings_stmt->fetch();
             });
         });
 
-        // Payment form handler
-        const paymentForm = document.getElementById('paymentForm');
-        paymentForm.addEventListener("submit", payWithPaystack, false);
+  const paymentForm = document.getElementById('paymentForm');
+    paymentForm.addEventListener("submit", function(e) {
+        e.preventDefault();
+        payWithPaystack();
+    });
 
-        function payWithPaystack(e) {
-            e.preventDefault();
-            
-            // Show loading spinner
-            const processingModal = document.getElementById('paymentProcessing');
-            processingModal.style.display = 'flex';
-            
-            // Disable pay button
-            const payButton = document.getElementById('payButton');
-            payButton.disabled = true;
-            payButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Processing...';
-            
-            // Get form data
-            const formData = {
-                email: '<?= htmlspecialchars($owner['email']) ?>',
-                amount: <?= $total_amount_due * 100 ?>, // Paystack uses amount in kobo
-                reference: 'ROOM_<?= $owner_id ?>_' + Date.now(),
-                pending_rooms: <?= $total_pending_payment_rooms ?>,
-                expired_rooms: <?= $total_expired_rooms ?>,
-                discount: <?= $discount ?>,
-                admin_phone: '<?= htmlspecialchars($admin_phone) ?>'
-            };
+    function payWithPaystack() {
+        console.log('Paystack payment initiated'); // Debugging
+        
+        // Show loading spinner
+        const processingModal = document.getElementById('paymentProcessing');
+        processingModal.style.display = 'flex';
+        
+        // Disable pay button
+        const payButton = document.getElementById('payButton');
+        payButton.disabled = true;
+        payButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Processing...';
+        
+        // Create form data
+        const formData = {
+            email: '<?= htmlspecialchars($owner['email']) ?>',
+            amount: <?= $total_amount_due * 100 ?>, // Paystack uses amount in kobo
+            reference: 'ROOM_<?= $owner_id ?>_' + Date.now(),
+            pending_rooms: <?= $total_pending_payment_rooms ?>,
+            expired_rooms: <?= $total_expired_rooms ?>,
+            discount: <?= $discount ?>,
+            admin_phone: '<?= htmlspecialchars($admin_phone) ?>'
+        };
 
-            // Initialize Paystack payment
-            const handler = PaystackPop.setup({
-                key: '<?= PAYSTACK_PUBLIC_KEY ?>', // Replace with your Paystack public key
-                email: formData.email,
-                amount: formData.amount,
-                currency: 'GHS',
-                ref: formData.reference,
-                metadata: {
-                    custom_fields: [
-                        {
-                            display_name: "Admin Phone",
-                            variable_name: "admin_phone",
-                            value: formData.admin_phone
-                        },
-                        {
-                            display_name: "Pending Rooms",
-                            variable_name: "pending_rooms",
-                            value: formData.pending_rooms
-                        },
-                        {
-                            display_name: "Expired Rooms",
-                            variable_name: "expired_rooms",
-                            value: formData.expired_rooms
-                        },
-                        {
-                            display_name: "Discount Applied",
-                            variable_name: "discount",
-                            value: formData.discount
-                        }
-                    ]
-                },
-                callback: function(response) {
-                    // Payment was successful
-                    processPayment(response, formData);
-                },
-                onClose: function() {
-                    // User closed payment window
-                    processingModal.style.display = 'none';
-                    payButton.disabled = false;
-                    payButton.innerHTML = '<i class="fas fa-credit-card me-2"></i> Pay Now via Paystack';
-                    
-                    // Show alert
-                    showAlert('Payment window closed - please try again', 'orange');
-                }
-            });
-            
-            handler.openIframe();
-        }
+        console.log('Form data:', formData); // Debugging
 
-        // Payment processing function
-        function processPayment(response, formData) {
-            const processingModal = document.getElementById('paymentProcessing');
-            const payButton = document.getElementById('payButton');
-            
-            // Update modal message
-            const spinnerText = processingModal.querySelector('p');
-            spinnerText.textContent = 'Verifying payment with Paystack...';
-            
-            // Prepare data to send to server
-            const postData = {
-                reference: response.reference,
-                amount: formData.amount / 100, // Convert back to GHS
-                pending_rooms: formData.pending_rooms,
-                expired_rooms: formData.expired_rooms,
-                discount: formData.discount
-            };
-
-            // Send verification request to server
-            fetch("verify_room_payment.php", {
-                method: "POST",
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(postData),
-                credentials: 'same-origin'
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => { throw err; });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    // Update modal with success message
-                    processingModal.querySelector('i').className = 'fas fa-check-circle text-success';
-                    processingModal.querySelector('h4').textContent = 'Payment Successful!';
-                    spinnerText.textContent = 'Redirecting to payment confirmation...';
-                    
-                    // Redirect to success page
-                    setTimeout(() => {
-                        window.location.href = `payment_success.php?reference=${data.reference}`;
-                    }, 2000);
-                } else {
-                    throw new Error(data.message || 'Payment verification failed');
-                }
-            })
-            .catch(error => {
-                console.error('Payment Error:', error);
-                
-                // Update modal with error message
-                processingModal.querySelector('i').className = 'fas fa-times-circle text-danger';
-                processingModal.querySelector('h4').textContent = 'Payment Failed';
-                spinnerText.textContent = error.message || 'Payment processing failed';
-                
-                // Reset button
+        // Initialize Paystack payment
+        const handler = PaystackPop.setup({
+            key: '<?= PAYSTACK_PUBLIC_KEY ?>',
+            email: formData.email,
+            amount: formData.amount,
+            currency: 'GHS',
+            ref: formData.reference,
+            metadata: {
+                custom_fields: [
+                    {
+                        display_name: "Admin Phone",
+                        variable_name: "admin_phone",
+                        value: formData.admin_phone
+                    },
+                    {
+                        display_name: "Pending Rooms",
+                        variable_name: "pending_rooms",
+                        value: formData.pending_rooms
+                    },
+                    {
+                        display_name: "Expired Rooms",
+                        variable_name: "expired_rooms",
+                        value: formData.expired_rooms
+                    },
+                    {
+                        display_name: "Discount Applied",
+                        variable_name: "discount",
+                        value: formData.discount
+                    }
+                ]
+            },
+            callback: function(response) {
+                // Payment was successful
+                console.log('Paystack response:', response);
+                processPayment(response, formData);
+            },
+            onClose: function() {
+                // User closed payment window
+                processingModal.style.display = 'none';
                 payButton.disabled = false;
                 payButton.innerHTML = '<i class="fas fa-credit-card me-2"></i> Pay Now via Paystack';
                 
-                // Hide modal after delay
-                setTimeout(() => {
-                    processingModal.style.display = 'none';
-                }, 3000);
-                
-                // Special handling for session expiration
-                if (error.message.includes('session') || error.message.includes('expired')) {
-                    setTimeout(() => {
-                        window.location.href = 'login.php';
-                    }, 2000);
-                }
-            });
+                // Show alert
+                showAlert('Payment window closed - please try again', 'orange');
+            }
+        });
+        
+        handler.openIframe();
+    }
+
+// Payment processing function
+function processPayment( response, formData) {
+    const processingModal = document.getElementById('paymentProcessing');
+    const payButton = document.getElementById('payButton');
+    
+    // Update modal message
+    const spinnerText = processingModal.querySelector('p');
+    spinnerText.textContent = 'Verifying payment with Paystack...';
+    
+    // Prepare data to send to server
+    const postData = {
+        reference: response.reference,
+        amount: formData.amount / 100, // Convert back to GHS
+        pending_rooms: formData.pending_rooms,
+        expired_rooms: formData.expired_rooms,
+        discount: formData.discount
+    };
+
+    console.log('Payment data to send:', postData);
+
+    // Send verification request to server
+    fetch("verify_room_payment.php", {
+        method: "POST",
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(postData),
+        credentials: 'same-origin'
+    })
+    .then(response => {
+        console.log('Payment verification response 1:', response);
+        if (!response.ok) {
+            return response.json().then(err => { throw err; });
         }
+        return response.json();
+        console.log('Payment verification response 2:', response);
+    })
+    .then(data => {
+        if (data.success) {
+            // Update modal with success message
+            processingModal.querySelector('i').className = 'fas fa-check-circle text-success';
+            processingModal.querySelector('h4').textContent = 'Payment Successful!';
+            spinnerText.textContent = 'Redirecting to payment confirmation...';
+            
+            // Redirect to success page
+            setTimeout(() => {
+                window.location.href = `payment_success.php?reference=${data.reference}`;
+            }, 5000);
+        } else {
+            throw new Error(data.message || 'Payment verification failed');
+        }
+    })
+    .catch(error => {
+        console.error('Payment Error:', error);
+        
+        // Update modal with error message
+        processingModal.querySelector('i').className = 'fas fa-times-circle text-danger';
+        processingModal.querySelector('h4').textContent = 'Payment Failed';
+        spinnerText.textContent = error.message || 'Payment processing failed';
+        
+        
+        
+        // Hide modal after delay
+        setTimeout(() => {
+            processingModal.style.display = 'none';
+        }, 3000);
+        
+        // Special handling for session expiration
+        if (error.message.includes('session') || error.message.includes('expired')) {
+            setTimeout(() => {
+                window.location.href = 'login.php';
+            }, 2000);
+        }
+    });
+}
 
         // Helper function to show alerts
         function showAlert(message, type) {
