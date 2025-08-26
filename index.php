@@ -819,7 +819,7 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
     <header>
         <div class="container header-container">
             <a href="index.php" class="logo">
-                <img src="assets/images/ktu logo.png" alt="Logo" width="60" height="60" class="me-2">
+                <img src="assets/images/landlords-logo.png" alt="Logo" width="100" height="80" class="me-2">
                 Landlords<span>&Tenants</span>
             </a>
             
@@ -935,7 +935,7 @@ $execution_time = round((microtime(true) - $start_time) * 1000, 2);
                 </div>
                 
                 <div class="about-image">
-                    <img src="assets/images/about_us.jpg" alt="Tenants enjoying their accommodation">
+                    <img src="assets/images/ELITE-HOSTEL.jpeg" alt="Tenants enjoying their accommodation">
                 </div>
             </div>
         </div>

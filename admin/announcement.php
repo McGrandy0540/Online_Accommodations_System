@@ -126,7 +126,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Announcements - UniHomes Admin</title>
+    <title>Announcements - Landlords&Tenants Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -136,7 +136,7 @@ try {
             --secondary: #2c3e50;
             --danger: #f72585;
             --success: #4cc9f0;
-            --warning: #f8961e;
+            --warning: #f8961e; 
             --info: #4895ef;
             --light: #f8f9fa;
             --dark: #212529;
@@ -493,7 +493,7 @@ try {
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h2>UniHomes Admin</h2>
+                <h2>Landlords&Tenants Admin</h2>
             </div>
             <div class="sidebar-menu">
                 <ul>

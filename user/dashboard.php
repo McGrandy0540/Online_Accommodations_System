@@ -37,7 +37,7 @@ function getProfilePicturePath($path) {
         return $path;
     }
     
-    return '../../' . ltrim($path, '/');
+    return '../uploads/profile_prictures/' . ltrim($path, '/');
 }
 
 $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
@@ -82,12 +82,182 @@ $announcements = $pdo->prepare("SELECT a.* FROM announcements a
 $announcements->execute([$student_id]);
 $recent_announcements = $announcements->fetchAll();
 
-// Get all activity logs for the tenant
-$activity = $pdo->prepare("SELECT * FROM activity_logs 
-                          WHERE user_id = ? 
-                          ORDER BY created_at DESC");
-$activity->execute([$student_id]);
-$all_activities = $activity->fetchAll();
+// Get comprehensive activity logs for the student from multiple sources
+$all_activities = [];
+
+// 1. Get booking activities
+// In the booking_activities query
+$booking_activities = $pdo->prepare("
+    SELECT 
+        'booking' as activity_type,
+        CONCAT('Booking ', 
+            CASE 
+                WHEN b.status = 'pending' THEN 'submitted for '  -- Changed to b.status
+                WHEN b.status = 'confirmed' THEN 'confirmed for '
+                WHEN b.status = 'paid' THEN 'payment completed for '
+                WHEN b.status = 'cancelled' THEN 'cancelled for '
+                WHEN b.status = 'rejected' THEN 'rejected for '
+                ELSE CONCAT(b.status, ' for ')
+            END,
+            p.property_name, ' - Room ', pr.room_number
+        ) as action,
+        'property' as entity_type,
+        b.created_at,
+        b.property_id as entity_id,
+        b.status as activity_status
+    FROM bookings b
+    JOIN property p ON b.property_id = p.id
+    LEFT JOIN property_rooms pr ON b.room_id = pr.id
+    WHERE b.user_id = ?
+    ORDER BY b.created_at DESC
+");
+$booking_activities->execute([$student_id]);
+$booking_results = $booking_activities->fetchAll();
+foreach($booking_results as $activity) {
+    $all_activities[] = $activity;
+}
+
+// 2. Get payment activities
+$payment_activities = $pdo->prepare("
+    SELECT 
+        'payment' as activity_type,
+        CONCAT('Payment of GHS ', FORMAT(p.amount, 2), ' ', 
+            CASE 
+                WHEN p.status = 'completed' THEN 'completed'
+                WHEN p.status = 'pending' THEN 'initiated'
+                WHEN p.status = 'failed' THEN 'failed'
+                ELSE p.status
+            END,
+            ' for ', prop.property_name
+        ) as action,
+        'payment' as entity_type,
+        p.created_at,
+        p.id as entity_id,
+        p.status as activity_status
+    FROM payments p
+    JOIN bookings b ON p.booking_id = b.id
+    JOIN property prop ON b.property_id = prop.id
+    WHERE b.user_id = ?
+    ORDER BY p.created_at DESC
+");
+$payment_activities->execute([$student_id]);
+$payment_results = $payment_activities->fetchAll();
+foreach($payment_results as $activity) {
+    $all_activities[] = $activity;
+}
+
+// 3. Get message activities
+$message_activities = $pdo->prepare("
+    SELECT 
+        'message' as activity_type,
+        CONCAT(
+            CASE 
+                WHEN cm.sender_id = ? THEN 'Sent message to '
+                ELSE 'Received message from '
+            END,
+            u.username,
+            CASE 
+                WHEN cc.property_id IS NOT NULL THEN CONCAT(' about ', p.property_name)
+                ELSE ''
+            END
+        ) as action,
+        'message' as entity_type,
+        cm.created_at,
+        cm.id as entity_id,
+        CASE WHEN cm.is_read = 1 THEN 'read' ELSE 'unread' END as activity_status
+    FROM chat_messages cm
+    JOIN chat_conversations cc ON cm.conversation_id = cc.id
+    JOIN users u ON (CASE WHEN cm.sender_id = ? THEN cc.owner_id ELSE cm.sender_id END) = u.id
+    LEFT JOIN property p ON cc.property_id = p.id
+    WHERE cc.student_id = ?
+    ORDER BY cm.created_at DESC
+    LIMIT 50
+");
+$message_activities->execute([$student_id, $student_id, $student_id]);
+$message_results = $message_activities->fetchAll();
+foreach($message_results as $activity) {
+    $all_activities[] = $activity;
+}
+
+// 4. Get maintenance activities
+$maintenance_activities = $pdo->prepare("
+    SELECT 
+        'maintenance' as activity_type,
+        CONCAT('Maintenance request ', 
+            CASE 
+                WHEN mr.status = 'pending' THEN 'submitted'
+                WHEN mr.status = 'in_progress' THEN 'is in progress'
+                WHEN mr.status = 'completed' THEN 'completed'
+                WHEN mr.status = 'cancelled' THEN 'cancelled'
+                ELSE mr.status
+            END,
+            ' for \"', mr.title, '\" at ', p.property_name
+        ) as action,
+        'maintenance' as entity_type,
+        mr.created_at,
+        mr.id as entity_id,
+        mr.status as activity_status
+    FROM maintenance_requests mr
+    JOIN property p ON mr.property_id = p.id
+    WHERE mr.user_id = ?
+    ORDER BY mr.created_at DESC
+");
+$maintenance_activities->execute([$student_id]);
+$maintenance_results = $maintenance_activities->fetchAll();
+foreach($maintenance_results as $activity) {
+    $all_activities[] = $activity;
+}
+
+// 5. Get review activities
+$review_activities = $pdo->prepare("
+    SELECT 
+        'review' as activity_type,
+        CONCAT('Left a ', r.rating, '-star review for ', p.property_name) as action,
+        'review' as entity_type,
+        r.created_at,
+        r.id as entity_id,
+        'completed' as activity_status
+    FROM reviews r
+    JOIN property p ON r.property_id = p.id
+    WHERE r.user_id = ?
+    ORDER BY r.created_at DESC
+");
+$review_activities->execute([$student_id]);
+$review_results = $review_activities->fetchAll();
+foreach($review_results as $activity) {
+    $all_activities[] = $activity;
+}
+
+// 6. Get system activities from activity_logs table (if it exists)
+try {
+    $system_activities = $pdo->prepare("
+        SELECT 
+            'system' as activity_type,
+            action,
+            entity_type,
+            created_at,
+            entity_id,
+            'completed' as activity_status
+        FROM activity_logs 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC
+    ");
+    $system_activities->execute([$student_id]);
+    $system_results = $system_activities->fetchAll();
+    foreach($system_results as $activity) {
+        $all_activities[] = $activity;
+    }
+} catch (PDOException $e) {
+    // activity_logs table might not exist, continue without it
+}
+
+// Sort all activities by date (most recent first)
+usort($all_activities, function($a, $b) {
+    return strtotime($b['created_at']) - strtotime($a['created_at']);
+});
+
+// Limit to most recent 100 activities
+$all_activities = array_slice($all_activities, 0, 100);
 
 // Get profile picture path
 $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
@@ -608,6 +778,7 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
         .payment-type { background-color: rgba(46, 204, 113, 0.1); color: #2ecc71; }
         .message-type { background-color: rgba(155, 89, 182, 0.1); color: #9b59b6; }
         .maintenance-type { background-color: rgba(241, 196, 15, 0.1); color: #f1c40f; }
+        .review-type { background-color: rgba(230, 126, 34, 0.1); color: #e67e22; }
         .system-type { background-color: rgba(149, 165, 166, 0.1); color: #95a5a6; }
 
         /* Quick Actions */
@@ -919,8 +1090,8 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                         <span class="d-none d-md-inline"><?= htmlspecialchars($student['username']) ?></span>
                     </div>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
-                        <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                        <li><a class="dropdown-item" href="profile/index.php"><i class="fas fa-user me-2"></i>Profile</a></li>
+                        <li><a class="dropdown-item" href="profile/index.php#settings-tab"><i class="fas fa-cog me-2"></i>Settings</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <form action="logout.php" method="POST">
@@ -954,11 +1125,11 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                     <li><a href="search/"><i class="fas fa-search"></i> <span class="menu-text">Find Accommodation</span></a></li>
                     <li><a href="bookings/"><i class="fas fa-calendar-alt"></i> <span class="menu-text">My Bookings</span></a></li>
                     <li><a href="payments/"><i class="fas fa-wallet"></i> <span class="menu-text">Payments</span></a></li>
-                    <li><a href="messages/"><i class="fas fa-comments"></i> <span class="menu-text">Messages</span></a></li>
                     <li><a href="reviews/"><i class="fas fa-star"></i> <span class="menu-text">Reviews</span></a></li>
                     <li><a href="maintenance/"><i class="fas fa-tools"></i> <span class="menu-text">Maintenance</span></a></li>
-                    <li><a href="settings.php"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
+                    <li><a href="profile/index.php"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
                     <li><a href="notification/"><i class="fas fa-bell"></i> <span class="menu-text">Notifications</span></a></li>
+                    <li><a href="sms/"><i class="fas fa-sms"></i> <span class="menu-text">SMS Settings</span></a></li>
                 </ul>
             </div>
         </div>
@@ -1003,7 +1174,7 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                                     </p>
                                 <?php endif; ?>
                             </div>
-                            <a href="profile.php" class="btn btn-outline w-100">
+                            <a href="profile/index.php" class="btn btn-outline w-100">
                                 <i class="fas fa-edit me-2"></i>Edit Profile
                             </a>
                         </div>
@@ -1019,8 +1190,8 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                             <a href="bookings/" class="action-btn">
                                 <i class="fas fa-calendar"></i> View Bookings
                             </a>
-                            <a href="messages/" class="action-btn">
-                                <i class="fas fa-comments"></i> View Messages
+                            <a href="payments/" class="action-btn">
+                                <i class="fas fa-wallet"></i> Make Payment
                             </a>
                         </div>
                     </div>
@@ -1081,32 +1252,37 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                                 <button class="filter-btn" data-filter="payment">Payments</button>
                                 <button class="filter-btn" data-filter="message">Messages</button>
                                 <button class="filter-btn" data-filter="maintenance">Maintenance</button>
+                                <button class="filter-btn" data-filter="review">Reviews</button>
                             </div>
                         </div>
                         <div class="activity-list">
                             <?php if (!empty($all_activities)): ?>
                                 <?php foreach($all_activities as $activity): 
-                                    // Determine activity type
-                                    $activity_type = 'system';
-                                    $type_class = 'system-type';
-                                    $icon = 'fas fa-info-circle';
+                                    // Use the activity_type from our comprehensive query
+                                    $activity_type = $activity['activity_type'];
+                                    $type_class = $activity_type . '-type';
                                     
-                                    if (stripos($activity['action'], 'booking') !== false) {
-                                        $activity_type = 'booking';
-                                        $type_class = 'booking-type';
-                                        $icon = 'fas fa-calendar-check';
-                                    } elseif (stripos($activity['action'], 'payment') !== false) {
-                                        $activity_type = 'payment';
-                                        $type_class = 'payment-type';
-                                        $icon = 'fas fa-money-bill-wave';
-                                    } elseif (stripos($activity['action'], 'message') !== false) {
-                                        $activity_type = 'message';
-                                        $type_class = 'message-type';
-                                        $icon = 'fas fa-comments';
-                                    } elseif (stripos($activity['action'], 'maintenance') !== false) {
-                                        $activity_type = 'maintenance';
-                                        $type_class = 'maintenance-type';
-                                        $icon = 'fas fa-tools';
+                                    // Set appropriate icons based on activity type
+                                    switch($activity_type) {
+                                        case 'booking':
+                                            $icon = 'fas fa-calendar-check';
+                                            break;
+                                        case 'payment':
+                                            $icon = 'fas fa-money-bill-wave';
+                                            break;
+                                        case 'message':
+                                            $icon = 'fas fa-comments';
+                                            break;
+                                        case 'maintenance':
+                                            $icon = 'fas fa-tools';
+                                            break;
+                                        case 'review':
+                                            $icon = 'fas fa-star';
+                                            $type_class = 'review-type';
+                                            break;
+                                        default:
+                                            $icon = 'fas fa-info-circle';
+                                            $type_class = 'system-type';
                                     }
                                 ?>
                                 <div class="activity-item" data-type="<?= $activity_type ?>">
@@ -1115,8 +1291,11 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                                     </div>
                                     <div class="activity-content">
                                         <h5><?= htmlspecialchars($activity['action']) ?></h5>
-                                        <?php if (!empty($activity['entity_type'])): ?>
+                                        <?php if (!empty($activity['entity_type']) && $activity['entity_type'] !== 'system'): ?>
                                             <p>Related to: <?= htmlspecialchars(ucfirst($activity['entity_type'])) ?></p>
+                                        <?php endif; ?>
+                                        <?php if (!empty($activity['activity_status']) && $activity['activity_status'] !== 'completed'): ?>
+                                            <p class="text-muted">Status: <?= htmlspecialchars(ucfirst($activity['activity_status'])) ?></p>
                                         <?php endif; ?>
                                         <div class="activity-meta">
                                             <span class="activity-type <?= $type_class ?>">
@@ -1204,6 +1383,26 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                         }
                     }
                 });
+            });
+        });
+
+
+                // Toggle tabs
+        const tabs = document.querySelectorAll('.profile-tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab
+                tab.classList.add('active');
+                
+                // Show corresponding content
+                const tabId = tab.getAttribute('data-tab');
+                document.getElementById(`${tabId}-tab`).classList.add('active');
             });
         });
     </script>

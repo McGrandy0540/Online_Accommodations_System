@@ -843,7 +843,7 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 
                                 <div class="booking-details">
                                     <div class="booking-detail">
-                                        <h6><i class="fas fa-user me-2"></i>Student</h6>
+                                        <h6><i class="fas fa-user me-2"></i>Tenant</h6>
                                         <p><?= htmlspecialchars($booking['student_name']) ?></p>
                                         <p><?= htmlspecialchars($booking['student_email']) ?></p>
                                         <p><?= $booking['review_count'] ?> reviews</p>

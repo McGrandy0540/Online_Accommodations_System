@@ -295,6 +295,8 @@ try {
                     <li><a href="reports/"><i class="fas fa-file-invoice-dollar"></i> Financial Reports</a></li>
                     <li><a href="approvals/"><i class="fas fa-calendar-alt"></i> Booking Approvals</a></li>
                     <li><a href="announcement.php"><i class="fa-solid fa-bullhorn"></i></i> Announcement </a></li>
+                    <li><a href="sms/"><i class="fas fa-sms"></i> Notifications</a></li>
+                </ul>
 <li>
    <form action="logout.php" method="POST">
       <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">

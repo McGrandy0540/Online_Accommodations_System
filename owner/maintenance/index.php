@@ -31,16 +31,20 @@ function getProfilePicturePath($path) {
         return $path;
     }
     
-    return '../' . ltrim($path, '/');
+    return '../../../' . ltrim($path, '/');
 }
 $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
 
-// Get maintenance requests
-$query = "SELECT mr.*, p.property_name, p.id as property_id 
+// CORRECTED: Get maintenance requests with proper owner filtering
+$query = "SELECT mr.*, p.property_name, p.id as property_id, u.username as student_name, u.email as student_email,
+          (SELECT COUNT(*) FROM maintenance_messages mm 
+           WHERE mm.maintenance_request_id = mr.id AND mm.sender_type = 'student' AND mm.is_read = FALSE) as unread_student_messages,
+          (SELECT COUNT(*) FROM maintenance_messages mm 
+           WHERE mm.maintenance_request_id = mr.id) as total_messages
           FROM maintenance_requests mr
           JOIN property p ON mr.property_id = p.id
-          JOIN property_owners po ON p.id = po.property_id
-          WHERE po.owner_id = ?
+          JOIN users u ON mr.user_id = u.id
+          WHERE p.owner_id = ?
           ORDER BY 
             CASE 
               WHEN mr.priority = 'emergency' THEN 1
@@ -56,8 +60,7 @@ $requests = $stmt->fetchAll();
 // Get properties for dropdown
 $properties = $pdo->prepare("SELECT p.id, p.property_name 
                             FROM property p
-                            JOIN property_owners po ON p.id = po.property_id
-                            WHERE po.owner_id = ? AND p.deleted = 0");
+                            WHERE p.owner_id = ? AND p.deleted = 0");
 $properties->execute([$owner_id]);
 $property_options = $properties->fetchAll();
 
@@ -93,34 +96,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit();
     }
     
-    if (isset($_POST['add_response'])) {
+    if (isset($_POST['send_message'])) {
         $request_id = $_POST['request_id'];
-        $response = $_POST['response'];
+        $message = trim($_POST['message']);
         
-        // Get current notes
-        $stmt = $pdo->prepare("SELECT admin_notes FROM maintenance_requests WHERE id = ?");
-        $stmt->execute([$request_id]);
-        $current_notes = $stmt->fetchColumn();
-        
-        // Append new response with timestamp
-        $new_notes = ($current_notes ? $current_notes . "\n\n" : "") . 
-                    date('Y-m-d H:i') . " (Owner): " . $response;
-        
-        $stmt = $pdo->prepare("UPDATE maintenance_requests 
-                              SET admin_notes = ?, updated_at = NOW()
-                              WHERE id = ?");
-        $stmt->execute([$new_notes, $request_id]);
-        
-        // Add notification
-        $pdo->prepare("INSERT INTO notifications (user_id, property_id, message, type)
-                      SELECT mr.user_id, mr.property_id, 
-                             CONCAT('New response for maintenance request #', mr.id),
-                             'system_alert'
-                      FROM maintenance_requests mr
-                      WHERE mr.id = ?")
-            ->execute([$request_id]);
+        if (!empty($message)) {
+            // Insert message into maintenance_messages table
+            $stmt = $pdo->prepare("INSERT INTO maintenance_messages 
+                                  (maintenance_request_id, sender_id, sender_type, message) 
+                                  VALUES (?, ?, 'owner', ?)");
+            $stmt->execute([$request_id, $owner_id, $message]);
             
-        header("Location: index.php?success=2");
+            // Update maintenance request timestamp
+            $pdo->prepare("UPDATE maintenance_requests SET updated_at = NOW() WHERE id = ?")
+                ->execute([$request_id]);
+            
+            // Mark owner's messages as read
+            $pdo->prepare("UPDATE maintenance_messages 
+                          SET is_read = TRUE 
+                          WHERE maintenance_request_id = ? AND sender_id = ?")
+                ->execute([$request_id, $owner_id]);
+            
+            // Add notification for student
+            $pdo->prepare("INSERT INTO notifications (user_id, property_id, message, type)
+                          SELECT mr.user_id, mr.property_id, 
+                                 CONCAT('New message for maintenance request #', mr.id),
+                                 'maintenance_message'
+                          FROM maintenance_requests mr
+                          WHERE mr.id = ?")
+                ->execute([$request_id]);
+                
+            header("Location: index.php?success=3&request_id=" . $request_id);
+            exit();
+        }
+    }
+    
+    if (isset($_POST['mark_messages_read'])) {
+        $request_id = $_POST['request_id'];
+        
+        // Mark all student messages as read for this request
+        $stmt = $pdo->prepare("UPDATE maintenance_messages 
+                              SET is_read = TRUE 
+                              WHERE maintenance_request_id = ? AND sender_type = 'student'");
+        $stmt->execute([$request_id]);
+        
+        header("Location: index.php?request_id=" . $request_id);
         exit();
     }
 }
@@ -137,7 +157,7 @@ $unread_messages = $messages->fetchColumn();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Maintenance Requests | UniHomes</title>
+    <title>Maintenance Requests | Landlords&Tenant</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -445,32 +465,6 @@ $unread_messages = $messages->fetchColumn();
             justify-content: center;
             font-size: 0.7rem;
             font-weight: bold;
-        }
-
-        /* Cards */
-        .card {
-            border: none;
-            border-radius: var(--border-radius);
-            box-shadow: var(--card-shadow);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            background-color: white;
-        }
-
-        .card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        .card-header {
-            background-color: white;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-            padding: 1rem 1.25rem;
-            font-weight: 600;
-            color: var(--secondary-color);
-        }
-
-        .card-body {
-            padding: 1.25rem;
         }
 
         /* Maintenance Request Styles */
@@ -784,34 +778,123 @@ $unread_messages = $messages->fetchColumn();
             color: var(--secondary-color);
         }
 
-        /* Responsive Styles */
-        @media (max-width: 992px) {
-            .sidebar {
-                left: calc(-1 * var(--sidebar-width));
-                box-shadow: none;
-            }
+        Modal Fixes
+        .modal-dialog {
+            max-width: 600px;
+        }
 
-            .sidebar.active {
-                left: 0;
-                box-shadow: 2px 0 15px rgba(0, 0, 0, 0.1);
-            }
+        .modal-body {
+            padding: 1.25rem;
+        }
 
-            .sidebar.collapsed {
-                left: calc(-1 * var(--sidebar-collapsed-width));
-            }
+        .form-control:focus {
+            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+            border-color: #3498db;
+        }
 
-            .sidebar.collapsed.active {
-                left: 0;
-                width: var(--sidebar-collapsed-width);
-            }
-
-            .main-content {
-                margin-left: 0;
-            }
-
-            .menu-toggle {
-                display: block;
-            }
+        /* COMPLETE MODAL STABILITY FIX - NO ANIMATIONS */
+        .modal {
+            transition: none !important;
+            animation: none !important;
+            backdrop-filter: none !important;
+        }
+        
+        .modal.fade {
+            transition: none !important;
+            animation: none !important;
+        }
+        
+        .modal.fade .modal-dialog {
+            transition: none !important;
+            transform: none !important;
+            animation: none !important;
+        }
+        
+        .modal.show .modal-dialog {
+            transform: none !important;
+            animation: none !important;
+        }
+        
+        .modal-backdrop {
+            transition: none !important;
+            animation: none !important;
+        }
+        
+        .modal-backdrop.fade {
+            opacity: 0.5 !important;
+            transition: none !important;
+            animation: none !important;
+        }
+        
+        .modal-backdrop.show {
+            opacity: 0.5 !important;
+            transition: none !important;
+            animation: none !important;
+        }
+        
+        /* Force stable modal content */
+        .modal-content {
+            transform: none !important;
+            transition: none !important;
+            animation: none !important;
+            will-change: auto !important;
+            position: relative !important;
+        }
+        
+        /* Stable positioning without flex issues */
+        .modal-dialog-centered {
+            display: flex !important;
+            align-items: center !important;
+            min-height: calc(100% - 1rem) !important;
+            margin: 1.75rem auto !important;
+        }
+        
+        /* Remove all transitions from form elements */
+        .modal-body textarea,
+        .modal-body input,
+        .modal-body select {
+            transition: none !important;
+            animation: none !important;
+        }
+        
+        /* Force immediate display */
+        .modal.show {
+            display: block !important;
+            opacity: 1 !important;
+        }
+        
+        .modal:not(.show) {
+            display: none !important;
+        }
+        
+        /* Prevent hover effects from interfering */
+        .modal:hover,
+        .modal-dialog:hover,
+        .modal-content:hover,
+        .modal-header:hover,
+        .modal-body:hover,
+        .modal-footer:hover {
+            transform: none !important;
+            transition: none !important;
+            animation: none !important;
+        }
+        
+        /* Force stable z-index */
+        .modal.show {
+            z-index: 1055 !important;
+        }
+        
+        .modal-backdrop.show {
+            z-index: 1050 !important;
+        }
+        
+        /* Prevent any pointer events issues */
+        .modal-backdrop {
+            pointer-events: auto !important;
+        }
+        
+        .modal.show .modal-dialog {
+            pointer-events: auto !important;
         }
 
         @media (max-width: 768px) {
@@ -852,8 +935,8 @@ $unread_messages = $messages->fetchColumn();
     <header class="main-header">
         <div class="header-container">
             <a href="../" class="logo">
-                <img src="../../assets/images/ktu logo.png" alt="UniHomes Logo">
-                <span>UniHomes</span>
+                <img src="../../assets/images/ktu logo.png" alt="Landlords&Tenant Logo">
+                <span>Landlords&Tenant</span>
             </a>
             
             <div class="user-controls">
@@ -930,6 +1013,8 @@ $unread_messages = $messages->fetchColumn();
                             Maintenance request status updated successfully!
                         <?php elseif ($_GET['success'] == 2): ?>
                             Response added successfully!
+                        <?php elseif ($_GET['success'] == 3): ?>
+                            Message sent successfully!
                         <?php endif; ?>
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
@@ -995,9 +1080,34 @@ $unread_messages = $messages->fetchColumn();
                                                 </div>
                                             <?php endif; ?>
                                             
+                                            <!-- Messages Section -->
+                                            <?php if ($request['total_messages'] > 0): ?>
+                                                <div class="messages-section mt-3">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <h6 class="mb-0">
+                                                            <i class="fas fa-comments"></i> Messages (<?= $request['total_messages'] ?>)
+                                                            <?php if ($request['unread_student_messages'] > 0): ?>
+                                                                <span class="badge bg-danger"><?= $request['unread_student_messages'] ?> new</span>
+                                                            <?php endif; ?>
+                                                        </h6>
+                                                        <?php if ($request['unread_student_messages'] > 0): ?>
+                                                            <form method="POST" style="display: inline;">
+                                                                <input type="hidden" name="request_id" value="<?= $request['id'] ?>">
+                                                                <button type="submit" name="mark_messages_read" class="btn btn-sm btn-outline-primary">
+                                                                    <i class="fas fa-check"></i> Mark as Read
+                                                                </button>
+                                                            </form>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-info" data-bs-toggle="collapse" data-bs-target="#messages<?= $request['id'] ?>" aria-expanded="false">
+                                                        <i class="fas fa-eye"></i> View Messages
+                                                    </button>
+                                                </div>
+                                            <?php endif; ?>
+                                            
                                             <div class="request-actions">
-                                                <button class="btn btn-outline" data-bs-toggle="modal" data-bs-target="#responseModal<?= $request['id'] ?>">
-                                                    <i class="fas fa-reply"></i> Add Response
+                                                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#messageModal<?= $request['id'] ?>">
+                                                    <i class="fas fa-reply"></i> Send Message
                                                 </button>
                                                 
                                                 <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#statusModal<?= $request['id'] ?>">
@@ -1005,7 +1115,8 @@ $unread_messages = $messages->fetchColumn();
                                                 </button>
                                                 
                                                 <?php if ($request['status'] !== 'completed'): ?>
-                                                    <form method="POST" action="submit.php" style="display: inline;">
+                                                    <!-- FIXED: Correct virtual tour creation path -->
+                                                    <form method="POST" action="../virtual-tours/create.php" style="display: inline;">
                                                         <input type="hidden" name="request_id" value="<?= $request['id'] ?>">
                                                         <input type="hidden" name="property_id" value="<?= $request['property_id'] ?>">
                                                         <button type="submit" class="btn btn-success" name="create_virtual_tour">
@@ -1017,25 +1128,85 @@ $unread_messages = $messages->fetchColumn();
                                         </div>
                                     </div>
                                     
-                                    <!-- Response Modal -->
-                                    <div class="modal fade" id="responseModal<?= $request['id'] ?>" tabindex="-1" aria-labelledby="responseModalLabel<?= $request['id'] ?>" aria-hidden="true">
-                                        <div class="modal-dialog">
+                                    <!-- Messages Collapse -->
+                                    <?php if ($request['total_messages'] > 0): ?>
+                                        <div class="collapse mt-3" id="messages<?= $request['id'] ?>">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <h6 class="mb-0">Conversation with <?= htmlspecialchars($request['student_name']) ?></h6>
+                                                </div>
+                                                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                                                    <?php
+                                                    // Get messages for this request
+                                                    $msg_stmt = $pdo->prepare("
+                                                        SELECT mm.*, u.username, u.profile_picture 
+                                                        FROM maintenance_messages mm
+                                                        JOIN users u ON mm.sender_id = u.id
+                                                        WHERE mm.maintenance_request_id = ?
+                                                        ORDER BY mm.created_at ASC
+                                                    ");
+                                                    $msg_stmt->execute([$request['id']]);
+                                                    $messages = $msg_stmt->fetchAll();
+                                                    ?>
+                                                    
+                                                    <?php foreach ($messages as $message): ?>
+                                                        <div class="message-item mb-3">
+                                                            <div class="d-flex <?= $message['sender_type'] === 'owner' ? 'justify-content-end' : 'justify-content-start' ?>">
+                                                                <div class="message-bubble <?= $message['sender_type'] === 'owner' ? 'bg-primary text-white' : 'bg-light' ?>" style="max-width: 70%; padding: 10px 15px; border-radius: 15px;">
+                                                                    <div class="message-header mb-1">
+                                                                        <small class="<?= $message['sender_type'] === 'owner' ? 'text-white-50' : 'text-muted' ?>">
+                                                                            <strong><?= htmlspecialchars($message['username']) ?></strong>
+                                                                            <?= $message['sender_type'] === 'owner' ? '(You)' : '(Student)' ?>
+                                                                            - <?= date('M j, Y g:i A', strtotime($message['created_at'])) ?>
+                                                                        </small>
+                                                                    </div>
+                                                                    <div class="message-content">
+                                                                        <?= nl2br(htmlspecialchars($message['message'])) ?>
+                                                                    </div>
+                                                                    <?php if ($message['sender_type'] === 'student' && !$message['is_read']): ?>
+                                                                        <div class="mt-1">
+                                                                            <small class="badge bg-warning">New</small>
+                                                                        </div>
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                    
+                                    <!-- Message Modal - STABLE SOLUTION -->
+                                    <div class="modal fade" id="messageModal<?= $request['id'] ?>" tabindex="-1" 
+                                         aria-labelledby="messageModalLabel<?= $request['id'] ?>" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
                                             <div class="modal-content">
                                                 <div class="modal-header">
-                                                    <h5 class="modal-title" id="responseModalLabel<?= $request['id'] ?>">Add Response</h5>
+                                                    <h5 class="modal-title" id="messageModalLabel<?= $request['id'] ?>">
+                                                        Send Message to <?= htmlspecialchars($request['student_name']) ?>
+                                                    </h5>
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                 </div>
                                                 <form method="POST">
-                                                    <div class="modal-body">
+                                                    <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
                                                         <input type="hidden" name="request_id" value="<?= $request['id'] ?>">
+                                                        <div class="alert alert-info">
+                                                            <strong>Request:</strong> <?= htmlspecialchars($request['title']) ?><br>
+                                                            <strong>Property:</strong> <?= htmlspecialchars($request['property_name']) ?>
+                                                        </div>
                                                         <div class="form-group">
-                                                            <label for="response" class="form-label">Your Response</label>
-                                                            <textarea class="form-control" id="response" name="response" required></textarea>
+                                                            <label for="message<?= $request['id'] ?>" class="form-label">Your Message</label>
+                                                            <textarea class="form-control" id="message<?= $request['id'] ?>" 
+                                                                      name="message" rows="6" placeholder="Type your message to the student..." 
+                                                                      required></textarea>
                                                         </div>
                                                     </div>
                                                     <div class="modal-footer">
-                                                        <button type="button" class="btn btn-outline" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-primary" name="add_response">Submit Response</button>
+                                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                        <button type="submit" class="btn btn-primary" name="send_message">
+                                                            <i class="fas fa-paper-plane"></i> Send Message
+                                                        </button>
                                                     </div>
                                                 </form>
                                             </div>
@@ -1126,6 +1297,128 @@ $unread_messages = $messages->fetchColumn();
             if (window.innerWidth > 992) {
                 sidebar.classList.remove('active');
             }
+        });
+
+        // COMPLETE MODAL STABILITY SOLUTION - REMOVE FADE CLASS AND USE CUSTOM IMPLEMENTATION
+        document.addEventListener('DOMContentLoaded', function() {
+            // Remove fade class from all modals to prevent animation issues
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(function(modal) {
+                modal.classList.remove('fade');
+                modal.style.display = 'none';
+                modal.classList.remove('show');
+            });
+
+            // Custom modal show/hide functions
+            function showModal(modalId) {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    // Hide any other open modals first
+                    modals.forEach(function(otherModal) {
+                        if (otherModal !== modal && otherModal.classList.contains('show')) {
+                            hideModal(otherModal.id);
+                        }
+                    });
+
+                    // Create backdrop
+                    let backdrop = document.querySelector('.modal-backdrop');
+                    if (!backdrop) {
+                        backdrop = document.createElement('div');
+                        backdrop.className = 'modal-backdrop show';
+                        document.body.appendChild(backdrop);
+                    }
+
+                    // Show modal
+                    modal.style.display = 'block';
+                    modal.classList.add('show');
+                    document.body.style.overflow = 'hidden';
+                    document.body.classList.add('modal-open');
+
+                    // Focus textarea after a short delay
+                    setTimeout(() => {
+                        const textarea = modal.querySelector('textarea[name="message"]');
+                        if (textarea) {
+                            textarea.focus();
+                        }
+                    }, 50);
+                }
+            }
+
+            function hideModal(modalId) {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.style.display = 'none';
+                    modal.classList.remove('show');
+                    
+                    // Remove backdrop
+                    const backdrop = document.querySelector('.modal-backdrop');
+                    if (backdrop) {
+                        backdrop.remove();
+                    }
+
+                    // Restore body
+                    document.body.style.overflow = '';
+                    document.body.classList.remove('modal-open');
+
+                    // Clear form
+                    const form = modal.querySelector('form');
+                    if (form) {
+                        const textarea = form.querySelector('textarea[name="message"]');
+                        if (textarea) {
+                            textarea.value = '';
+                        }
+                    }
+                }
+            }
+
+            // Replace all modal triggers with custom implementation
+            document.addEventListener('click', function(event) {
+                const trigger = event.target.closest('[data-bs-toggle="modal"]');
+                if (trigger) {
+                    event.preventDefault();
+                    const targetModal = trigger.getAttribute('data-bs-target');
+                    if (targetModal) {
+                        const modalId = targetModal.replace('#', '');
+                        showModal(modalId);
+                    }
+                }
+
+                // Handle close buttons
+                const closeBtn = event.target.closest('[data-bs-dismiss="modal"], .btn-close');
+                if (closeBtn) {
+                    event.preventDefault();
+                    const modal = closeBtn.closest('.modal');
+                    if (modal) {
+                        hideModal(modal.id);
+                    }
+                }
+            });
+
+            // Handle backdrop clicks
+            document.addEventListener('click', function(event) {
+                if (event.target.classList.contains('modal')) {
+                    hideModal(event.target.id);
+                }
+            });
+
+            // Handle escape key
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape') {
+                    const openModal = document.querySelector('.modal.show');
+                    if (openModal) {
+                        hideModal(openModal.id);
+                    }
+                }
+            });
+
+            // Prevent form submission issues
+            document.addEventListener('submit', function(event) {
+                const form = event.target;
+                if (form.closest('.modal')) {
+                    // Let the form submit normally, modal will close on page reload
+                    return true;
+                }
+            });
         });
     </script>
 </body>

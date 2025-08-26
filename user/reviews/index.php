@@ -16,18 +16,24 @@ if ($_SESSION['status'] !== 'student') {
 $student_id = $_SESSION['user_id'];
 $pdo = Database::getInstance();
 
-// Function to get profile picture path
+$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->execute([$student_id]);
+$student = $stmt->fetch();
+
+// Get profile picture path
 function getProfilePicturePath($path) {
     if (empty($path)) {
-        return '../../assets/images/default-avatar.png';
+        return '../../assets/images/ktu logo.png';
     }
     
     if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
         return $path;
     }
     
-    return '../../' . ltrim($path, '/');
+    return '../../uploads/profile_prictures/' . ltrim($path, '/');
 }
+
+$profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
 
 // Handle review submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_review'])) {
@@ -170,6 +176,8 @@ function displayStars($rating) {
 
 // Get current tab from URL
 $current_tab = isset($_GET['tab']) ? $_GET['tab'] : 'write';
+
+$profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -830,8 +838,14 @@ $current_tab = isset($_GET['tab']) ? $_GET['tab'] : 'write';
             <div class="container header-content">
                 <h1>Student Accommodation Reviews</h1>
                 <div class="user-info">
-                    <img src="<?= getProfilePicturePath($_SESSION['profile_picture'] ?? '') ?>" alt="Profile">
-                    <span><?= htmlspecialchars($_SESSION['username'] ?? 'Student') ?></span>
+                        <?php if (!empty($profile_pic_path)): ?>
+                            <img src="<?= htmlspecialchars($profile_pic_path) ?>" alt="User Profile">
+                        <?php else: ?>
+                            <div class="avatar-placeholder">
+                                <?= substr($student['username'], 0, 1) ?>
+                            </div>
+                        <?php endif; ?>
+                        <span class="d-none d-md-inline"><?= htmlspecialchars($student['username']) ?></span>
                 </div>
             </div>
         </header>

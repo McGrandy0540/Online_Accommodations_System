@@ -26,7 +26,7 @@ $filters = [
     'amenities' => isset($_GET['amenities']) ? (array)$_GET['amenities'] : []
 ];
 
-// FIXED: Show all approved properties regardless of room availability
+// Query to get approved properties
 $query = "SELECT 
             p.*, 
             (SELECT image_url FROM property_images WHERE property_id = p.id LIMIT 1) as thumbnail,
@@ -64,8 +64,26 @@ if (!empty($filters['gender'])) {
         AND pr.gender = ? 
         AND pr.status = 'available'
         AND pr.levy_payment_status = 'approved'
+        AND pr.capacity > pr.current_occupancy + (
+            SELECT COUNT(*) 
+            FROM bookings b 
+            WHERE b.room_id = pr.id 
+            AND b.status IN ('pending', 'confirmed', 'paid')
+        )
     )";
     $params[] = $filters['gender'];
+}
+
+// Add amenities filter
+if (!empty($filters['amenities'])) {
+    $placeholders = implode(',', array_fill(0, count($filters['amenities']), '?'));
+    $query .= " AND EXISTS (
+        SELECT 1 
+        FROM property_features pf 
+        WHERE pf.property_id = p.id 
+        AND pf.feature_name IN ($placeholders)
+    )";
+    $params = array_merge($params, $filters['amenities']);
 }
 
 // Add sorting
@@ -1035,7 +1053,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                             $image_stmt->execute([$property['id']]);
                             $images = $image_stmt->fetchAll(PDO::FETCH_ASSOC);
                             
-                            // FIXED: Get room details with correct availability calculation
+                            // Get room details with correct availability calculation
                             $room_query = "SELECT pr.*, 
                                            (SELECT COUNT(*) 
                                             FROM bookings b 

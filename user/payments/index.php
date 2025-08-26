@@ -127,7 +127,7 @@ function getProfilePicturePath($path) {
         return $path;
     }
     
-    return '../../../' . ltrim($path, '/');
+    return '../../uploads/profile_prictures/' . ltrim($path, '/');
 }
 
 $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
@@ -704,14 +704,13 @@ $unread_notifications = $notifications_stmt->fetchAll();
             <div class="sidebar-menu">
                 <ul>
                     <li><a href="../dashboard.php"><i class="fas fa-tachometer-alt me-2"></i> <span>Dashboard</span></a></li>
-                    <li><a href="../properties/index.php"><i class="fas fa-home me-2"></i> <span>Find Accommodation</span></a></li>
+                    <li><a href="../search/index.php"><i class="fas fa-home me-2"></i> <span>Find Accommodation</span></a></li>
                     <li><a href="../bookings/index.php"><i class="fas fa-calendar-alt me-2"></i> <span>My Bookings</span></a></li>
                     <li><a href="index.php" class="active"><i class="fas fa-wallet me-2"></i> <span>Payments</span></a></li>
                     <li><a href="../reviews/index.php"><i class="fas fa-star me-2"></i> <span>Reviews</span></a></li>
-                    <li><a href="../chat/index.php"><i class="fas fa-comments me-2"></i> <span>Messages</span></a></li>
                     <li><a href="../maintenance/index.php"><i class="fas fa-tools me-2"></i> <span>Maintenance</span></a></li>
                     <li><a href="../announcements/index.php"><i class="fas fa-bullhorn me-2"></i> <span>Announcements</span></a></li>
-                    <li><a href="../settings/index.php"><i class="fas fa-cog me-2"></i> <span>Settings</span></a></li>
+                    <li><a href="../profile/index.php"><i class="fas fa-cog me-2"></i> <span>Settings</span></a></li>
                 </ul>
             </div>
         </div>

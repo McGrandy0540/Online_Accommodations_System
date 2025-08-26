@@ -919,6 +919,166 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                         </div>
                     <?php endif; ?>
                 </div>
+
+                <!-- Room Reviews Section (for owners only) -->
+                <?php if($is_owner): ?>
+                    <div class="property-section">
+                        <h3 class="section-title">Room Reviews & Feedback</h3>
+                        <?php
+                        // Get all rooms for this property (including occupied ones)
+                        $all_rooms_stmt = $pdo->prepare("
+                            SELECT * FROM property_rooms 
+                            WHERE property_id = ?
+                            ORDER BY room_number
+                        ");
+                        $all_rooms_stmt->execute([$property_id]);
+                        $all_rooms = $all_rooms_stmt->fetchAll();
+
+                        if(count($all_rooms) > 0):
+                            foreach($all_rooms as $room):
+                                // Get student reviews for this room (via bookings)
+                                $room_reviews_stmt = $pdo->prepare("
+                                    SELECT r.*, u.username, u.profile_picture, b.room_id
+                                    FROM reviews r
+                                    JOIN users u ON r.user_id = u.id
+                                    JOIN bookings b ON b.user_id = r.user_id AND b.property_id = r.property_id
+                                    WHERE r.property_id = ? AND b.room_id = ?
+                                    ORDER BY r.created_at DESC
+                                ");
+                                $room_reviews_stmt->execute([$property_id, $room['id']]);
+                                $room_student_reviews = $room_reviews_stmt->fetchAll();
+
+                                // Get maintenance reviews for this room
+                                $maintenance_reviews_stmt = $pdo->prepare("
+                                    SELECT mr.rating, mr.feedback, mr.feedback_date, mr.title as issue_title,
+                                           u.username, u.profile_picture
+                                    FROM maintenance_requests mr
+                                    JOIN users u ON mr.user_id = u.id
+                                    JOIN bookings b ON b.user_id = mr.user_id AND b.property_id = mr.property_id
+                                    WHERE mr.property_id = ? AND b.room_id = ? 
+                                    AND mr.rating IS NOT NULL AND mr.feedback IS NOT NULL
+                                    ORDER BY mr.feedback_date DESC
+                                ");
+                                $maintenance_reviews_stmt->execute([$property_id, $room['id']]);
+                                $room_maintenance_reviews = $maintenance_reviews_stmt->fetchAll();
+
+                                $total_reviews = count($room_student_reviews) + count($room_maintenance_reviews);
+                        ?>
+                                <div class="room-reviews-container mb-4">
+                                    <div class="room-header d-flex justify-content-between align-items-center mb-3 p-3 bg-light rounded">
+                                        <div>
+                                            <h5 class="mb-1">
+                                                <i class="fas fa-door-open text-primary me-2"></i>
+                                                Room <?= htmlspecialchars($room['room_number']) ?>
+                                            </h5>
+                                            <small class="text-muted">
+                                                Capacity: <?= $room['capacity'] ?> | Status: 
+                                                <span class="badge bg-<?= $room['status'] === 'available' ? 'success' : ($room['status'] === 'occupied' ? 'warning' : 'secondary') ?>">
+                                                    <?= ucfirst($room['status']) ?>
+                                                </span>
+                                            </small>
+                                        </div>
+                                        <div class="text-end">
+                                            <span class="badge bg-info">
+                                                <?= $total_reviews ?> Review<?= $total_reviews !== 1 ? 's' : '' ?>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <?php if($total_reviews > 0): ?>
+                                        <!-- Student Reviews -->
+                                        <?php if(count($room_student_reviews) > 0): ?>
+                                            <div class="reviews-section mb-3">
+                                                <h6 class="text-primary mb-3">
+                                                    <i class="fas fa-star me-2"></i>Student Reviews (<?= count($room_student_reviews) ?>)
+                                                </h6>
+                                                <?php foreach($room_student_reviews as $review): ?>
+                                                    <div class="review-card mb-3">
+                                                        <div class="review-header">
+                                                            <?php if(!empty($review['profile_picture'])): ?>
+                                                                <img src="<?= getProfilePicturePath($review['profile_picture']) ?>" 
+                                                                     class="review-avatar" 
+                                                                     alt="<?= htmlspecialchars($review['username']) ?>">
+                                                            <?php else: ?>
+                                                                <div class="review-avatar bg-light text-dark d-flex align-items-center justify-content-center">
+                                                                    <?= strtoupper(substr($review['username'], 0, 1)) ?>
+                                                                </div>
+                                                            <?php endif; ?>
+                                                            <div>
+                                                                <div class="review-user"><?= htmlspecialchars($review['username']) ?></div>
+                                                                <div class="review-date">
+                                                                    <?= date('F j, Y', strtotime($review['created_at'])) ?>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="review-rating">
+                                                            <?php
+                                                            for ($i = 1; $i <= 5; $i++) {
+                                                                echo $i <= $review['rating'] ? '<i class="fas fa-star"></i>' : '<i class="far fa-star"></i>';
+                                                            }
+                                                            ?>
+                                                        </div>
+                                                        <p class="review-text"><?= nl2br(htmlspecialchars($review['comment'] ?? 'No comment provided')) ?></p>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <!-- Maintenance Reviews -->
+                                        <?php if(count($room_maintenance_reviews) > 0): ?>
+                                            <div class="maintenance-reviews-section">
+                                                <h6 class="text-success mb-3">
+                                                    <i class="fas fa-tools me-2"></i>Maintenance Feedback (<?= count($room_maintenance_reviews) ?>)
+                                                </h6>
+                                                <?php foreach($room_maintenance_reviews as $maintenance_review): ?>
+                                                    <div class="review-card mb-3 border-start border-success border-3">
+                                                        <div class="review-header">
+                                                            <?php if(!empty($maintenance_review['profile_picture'])): ?>
+                                                                <img src="<?= getProfilePicturePath($maintenance_review['profile_picture']) ?>" 
+                                                                     class="review-avatar" 
+                                                                     alt="<?= htmlspecialchars($maintenance_review['username']) ?>">
+                                                            <?php else: ?>
+                                                                <div class="review-avatar bg-light text-dark d-flex align-items-center justify-content-center">
+                                                                    <?= strtoupper(substr($maintenance_review['username'], 0, 1)) ?>
+                                                                </div>
+                                                            <?php endif; ?>
+                                                            <div>
+                                                                <div class="review-user"><?= htmlspecialchars($maintenance_review['username']) ?></div>
+                                                                <div class="review-date">
+                                                                    <?= date('F j, Y', strtotime($maintenance_review['feedback_date'])) ?>
+                                                                </div>
+                                                                <small class="text-muted">Issue: <?= htmlspecialchars($maintenance_review['issue_title']) ?></small>
+                                                            </div>
+                                                        </div>
+                                                        <div class="review-rating">
+                                                            <?php
+                                                            for ($i = 1; $i <= 5; $i++) {
+                                                                echo $i <= $maintenance_review['rating'] ? '<i class="fas fa-star"></i>' : '<i class="far fa-star"></i>';
+                                                            }
+                                                            ?>
+                                                        </div>
+                                                        <p class="review-text"><?= nl2br(htmlspecialchars($maintenance_review['feedback'])) ?></p>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <div class="alert alert-light">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            No reviews or feedback available for this room yet.
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                        <?php 
+                            endforeach;
+                        else: ?>
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                No rooms found for this property.
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
                 
                 <!-- Reviews -->
                 <div class="property-section">
@@ -1379,22 +1539,22 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                         
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="studentName" class="form-label">Student Full Name *</label>
+                                <label for="studentName" class="form-label">Tenant Full Name *</label>
                                 <input type="text" class="form-control" id="studentName" name="student_name" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label for="studentEmail" class="form-label">Student Email *</label>
+                                <label for="studentEmail" class="form-label">Tenant Email *</label>
                                 <input type="email" class="form-control" id="studentEmail" name="student_email" required>
                             </div>
                         </div>
                         
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="studentPhone" class="form-label">Student Phone *</label>
+                                <label for="studentPhone" class="form-label">Tenant Phone *</label>
                                 <input type="tel" class="form-control" id="studentPhone" name="student_phone" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label for="studentId" class="form-label">Student ID (Optional)</label>
+                                <label for="studentId" class="form-label">Tenant ID (Optional)</label>
                                 <input type="text" class="form-control" id="studentId" name="student_id">
                             </div>
                         </div>
