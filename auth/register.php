@@ -8,7 +8,7 @@ error_reporting(E_ALL);
 
 // Include required files
 require_once '../config/database.php';
-require_once '../includes/SMSService.php';
+require_once '../config/constants.php'; // Make sure your Paystack API key is here
 
 // Redirect if already logged in
 if (isset($_SESSION['user_id'])) {
@@ -25,148 +25,199 @@ $formData = [
     'location' => ''
 ];
 $step = $_POST['step'] ?? $_GET['step'] ?? 'form';
-$otpVerified = isset($_SESSION['otp_verified']) && $_SESSION['otp_verified'];
 
-// Handle AJAX requests
-if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
-    header('Content-Type: application/json');
-    
-    if ($_POST['action'] === 'send_otp') {
-        $phoneNumber = $_POST['phone_number'] ?? '';
+// Get admin phone number for Paystack
+$admin_phone = '';
+try {
+    $db = Database::getInstance();
+    $admin_stmt = $db->prepare("SELECT phone_number FROM users WHERE status = 'admin' LIMIT 1");
+    $admin_stmt->execute();
+    $admin = $admin_stmt->fetch();
+    $admin_phone = $admin ? $admin['phone_number'] : ''; 
+} catch(Exception $e) {
+    error_log("Admin phone query error: " . $e->getMessage());
+    $admin_phone = '';
+}
+
+// Handle Paystack callback
+if (isset($_GET['paystack_callback']) && $_GET['paystack_callback'] === 'true') {
+    if (isset($_GET['reference']) && isset($_SESSION['pending_registration'])) {
+        $reference = $_GET['reference'];
+        $registrationData = $_SESSION['pending_registration'];
         
-        if (empty($phoneNumber)) {
-            echo json_encode(['success' => false, 'message' => 'Phone number is required']);
-            exit;
-        }
+        // Verify payment with Paystack
+        $curl = curl_init();
+        curl_setopt_array($curl, [
+            CURLOPT_URL => "https://api.paystack.co/transaction/verify/" . rawurlencode($reference),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer " . PAYSTACK_SECRET_KEY,
+                "Cache-Control: no-cache",
+            ],
+        ]);
         
-        try {
-            // Generate 6-digit OTP locally
-            $otpCode = str_pad(random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
-            
-            // Store OTP in session with timestamp
-            $_SESSION['registration_phone'] = $phoneNumber;
-            $_SESSION['otp_code'] = $otpCode;
-            $_SESSION['otp_sent_at'] = time();
-            $_SESSION['otp_attempts'] = 0;
-            
-            // Send OTP via Arkesel SMS
-            $smsService = new SMSService();
-            $message = "Your Landlords&Tenants registration OTP is: {$otpCode}. Valid for 30 seconds. Do not share this code.";
-            
-            $smsResult = $smsService->sendSMS($phoneNumber, $message);
-            
-            if ($smsResult) {
-                echo json_encode([
-                    'success' => true,
-                    'message' => 'OTP sent successfully to your phone',
-                    'expires_in' => 30
-                ]);
-            } else {
-                // Still allow registration with locally generated OTP even if SMS fails
-                echo json_encode([
-                    'success' => true,
-                    'message' => 'SMS service temporarily unavailable. Your OTP is: ' . $otpCode,
-                    'fallback' => true,
-                    'otp_code' => $otpCode,
-                    'expires_in' => 30
-                ]);
-            }
-            
-        } catch (Exception $e) {
-            error_log("OTP Send Error: " . $e->getMessage());
-            
-            // Generate OTP locally as fallback
-            $otpCode = str_pad(random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
-            $_SESSION['registration_phone'] = $phoneNumber;
-            $_SESSION['otp_code'] = $otpCode;
-            $_SESSION['otp_sent_at'] = time();
-            $_SESSION['otp_attempts'] = 0;
-            
-            echo json_encode([
-                'success' => true,
-                'message' => 'SMS service temporarily unavailable. Your OTP is: ' . $otpCode,
-                'fallback' => true,
-                'otp_code' => $otpCode,
-                'expires_in' => 30
-            ]);
-        }
-        exit;
-    }
-    
-    if ($_POST['action'] === 'verify_otp') {
-        $phoneNumber = $_POST['phone_number'] ?? '';
-        $otpCode = $_POST['otp_code'] ?? '';
+        $response = curl_exec($curl);
+        $err = curl_error($curl);
+        curl_close($curl);
         
-        if (empty($phoneNumber) || empty($otpCode)) {
-            echo json_encode(['success' => false, 'message' => 'Phone number and OTP code are required']);
-            exit;
-        }
-        
-        // Check if OTP session exists
-        if (!isset($_SESSION['otp_code']) || !isset($_SESSION['otp_sent_at'])) {
-            echo json_encode(['success' => false, 'message' => 'No OTP found. Please request a new one.']);
-            exit;
-        }
-        
-        // Check if OTP has expired (30 seconds)
-        $currentTime = time();
-        $otpSentTime = $_SESSION['otp_sent_at'];
-        $timeElapsed = $currentTime - $otpSentTime;
-        
-        if ($timeElapsed > 30) {
-            // Clear expired OTP
-            unset($_SESSION['otp_code']);
-            unset($_SESSION['otp_sent_at']);
-            echo json_encode(['success' => false, 'message' => 'OTP has expired. Please request a new one.', 'expired' => true]);
-            exit;
-        }
-        
-        // Check attempts limit
-        if (!isset($_SESSION['otp_attempts'])) {
-            $_SESSION['otp_attempts'] = 0;
-        }
-        
-        if ($_SESSION['otp_attempts'] >= 3) {
-            // Clear OTP after max attempts
-            unset($_SESSION['otp_code']);
-            unset($_SESSION['otp_sent_at']);
-            unset($_SESSION['otp_attempts']);
-            echo json_encode(['success' => false, 'message' => 'Maximum attempts exceeded. Please request a new OTP.']);
-            exit;
-        }
-        
-        // Increment attempts
-        $_SESSION['otp_attempts']++;
-        
-        // Verify OTP
-        if ($_SESSION['otp_code'] === $otpCode && $_SESSION['registration_phone'] === $phoneNumber) {
-            $_SESSION['otp_verified'] = true;
-            $_SESSION['otp_verified_at'] = time();
-            $_SESSION['verified_phone'] = $phoneNumber;
-            
-            // Clear OTP data
-            unset($_SESSION['otp_code']);
-            unset($_SESSION['otp_sent_at']);
-            unset($_SESSION['otp_attempts']);
-            
-            echo json_encode([
-                'success' => true, 
-                'message' => 'OTP verified successfully!',
-                'remaining_time' => max(0, 30 - $timeElapsed)
-            ]);
+        if ($err) {
+            $errors['payment'] = 'Payment verification failed: ' . $err;
         } else {
-            echo json_encode([
-                'success' => false, 
-                'message' => 'Invalid OTP code. Attempts remaining: ' . (3 - $_SESSION['otp_attempts']),
-                'remaining_time' => max(0, 30 - $timeElapsed)
-            ]);
+            $tranx = json_decode($response);
+            
+            if (!$tranx->status) {
+                $errors['payment'] = 'Payment verification failed: ' . $tranx->message;
+            } else if ('success' == $tranx->data->status) {
+                // Payment was successful
+                $amount = $tranx->data->amount / 100; // Convert from kobo to currency
+                
+                if ($amount == 20) { // GHS 20
+                    try {
+                        $db = Database::getInstance();
+                        $db->beginTransaction();
+                        
+                        // Check if email already exists (double check)
+                        $checkEmail = $db->prepare("SELECT id FROM users WHERE email = :email");
+                        $checkEmail->bindParam(':email', $registrationData['email']);
+                        $checkEmail->execute();
+                        
+                        if ($checkEmail->rowCount() > 0) {
+                            throw new Exception("Email already registered");
+                        }
+                        
+                        // Create the user after successful payment
+                        $query = "INSERT INTO users (
+                            username, 
+                            pwd, 
+                            status, 
+                            sex, 
+                            email, 
+                            location, 
+                            phone_number,
+                            email_notifications,
+                            sms_notifications,
+                            credit_score,
+                            phone_verified,
+                            subscription_status,
+                            subscription_expires_at
+                        ) VALUES (
+                            :username, 
+                            :password, 
+                            :status, 
+                            :sex, 
+                            :email, 
+                            :location, 
+                            :phone_number,
+                            1,
+                            0,
+                            100.00,
+                            1,
+                            'active',
+                            :subscription_expires_at
+                        )";
+                        
+                        // Calculate subscription expiry date (8 months from now)
+                        $startDate = date('Y-m-d');
+                        $expiryDate = date('Y-m-d', strtotime('+8 months'));
+                        
+                        $stmt = $db->prepare($query);
+                        $stmt->bindParam(':username', $registrationData['username']);
+                        $stmt->bindParam(':password', $registrationData['password']);
+                        $stmt->bindParam(':status', $registrationData['status']);
+                        $stmt->bindParam(':sex', $registrationData['sex']);
+                        $stmt->bindParam(':email', $registrationData['email']);
+                        $stmt->bindParam(':location', $registrationData['location']);
+                        $stmt->bindParam(':phone_number', $registrationData['phone_number']);
+                        $stmt->bindParam(':subscription_expires_at', $expiryDate);
+                        
+                        if ($stmt->execute()) {
+                            $userId = $db->lastInsertId();
+                            
+                            // Create property owner record if needed
+                            if ($registrationData['status'] === 'property_owner') {
+                                $ownerStmt = $db->prepare("INSERT INTO property_owners (owner_id) VALUES (:user_id)");
+                                $ownerStmt->bindParam(':user_id', $userId);
+                                $ownerStmt->execute();
+                            }
+                            
+                            // Get the subscription plan (8 months)
+                            $planQuery = "SELECT * FROM subscription_plans WHERE is_active = 1 LIMIT 1";
+                            $planStmt = $db->prepare($planQuery);
+                            $planStmt->execute();
+                            $plan = $planStmt->fetch(PDO::FETCH_ASSOC);
+                            
+                            if ($plan) {
+                                // Create subscription record
+                                $subscriptionQuery = "INSERT INTO user_subscriptions (
+                                    user_id, plan_id, payment_reference, amount_paid, 
+                                    start_date, end_date, status, payment_method
+                                ) VALUES (
+                                    :user_id, :plan_id, :reference, :amount,
+                                    :start_date, :end_date, 'active', 'paystack'
+                                )";
+                                
+                                $subscriptionStmt = $db->prepare($subscriptionQuery);
+                                $subscriptionStmt->bindParam(':user_id', $userId);
+                                $subscriptionStmt->bindParam(':plan_id', $plan['id']);
+                                $subscriptionStmt->bindParam(':reference', $reference);
+                                $subscriptionStmt->bindParam(':amount', $amount);
+                                $subscriptionStmt->bindParam(':start_date', $startDate);
+                                $subscriptionStmt->bindParam(':end_date', $expiryDate);
+                                
+                                if ($subscriptionStmt->execute()) {
+                                    $subscriptionId = $db->lastInsertId();
+                                    
+                                    // Log payment
+                                    $paymentLogQuery = "INSERT INTO subscription_payment_logs (
+                                        user_id, subscription_id, payment_reference, amount,
+                                        payment_status, payment_method, paystack_response
+                                    ) VALUES (
+                                        :user_id, :subscription_id, :reference, :amount,
+                                        'success', 'paystack', :response
+                                    )";
+                                    
+                                    $paymentStmt = $db->prepare($paymentLogQuery);
+                                    $paymentStmt->bindParam(':user_id', $userId);
+                                    $paymentStmt->bindParam(':subscription_id', $subscriptionId);
+                                    $paymentStmt->bindParam(':reference', $reference);
+                                    $paymentStmt->bindParam(':amount', $amount);
+                                    $paymentStmt->bindParam(':response', $response);
+                                    $paymentStmt->execute();
+                                }
+                            }
+                            
+                            $db->commit();
+                            
+                            // Clear session data
+                            unset($_SESSION['pending_registration']);
+                            
+                            header('Location: login.php?success=1&subscribed=1');
+                            exit();
+                        } else {
+                            throw new Exception("Failed to create user account");
+                        }
+                    } catch(Exception $e) {
+                        if (isset($db)) {
+                            $db->rollBack();
+                        }
+                        $errors['payment'] = 'Database error: ' . $e->getMessage();
+                        error_log("Registration after payment Error: " . $e->getMessage());
+                    }
+                } else {
+                    $errors['payment'] = 'Invalid payment amount. Expected GHS 20.';
+                }
+            } else {
+                $errors['payment'] = 'Payment was not successful: ' . $tranx->data->gateway_response;
+            }
         }
-        exit;
+    } else {
+        $errors['payment'] = 'Invalid payment callback parameters or session expired';
     }
 }
 
 // Process form submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['ajax'])) {
+    // Get form data
     $formData['username'] = trim($_POST['username'] ?? '');
     $formData['email'] = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
@@ -212,16 +263,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['ajax'])) {
         $errors['location'] = 'Location is required';
     }
 
-    // Check if OTP is verified for students and property owners
-    if (($status === 'student' || $status === 'property_owner') && !$otpVerified) {
-        $errors['otp'] = 'Phone number verification is required';
-        $step = 'otp';
-    }
-
     if (empty($errors)) {
         try {
             $db = Database::getInstance();
-            $db->beginTransaction();
             
             // Check if email already exists
             $checkEmail = $db->prepare("SELECT id FROM users WHERE email = :email");
@@ -231,75 +275,124 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['ajax'])) {
             if ($checkEmail->rowCount() > 0) {
                 $errors['email'] = 'Email already registered';
             } else {
-                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-                
-                $query = "INSERT INTO users (
-                    username, 
-                    pwd, 
-                    status, 
-                    sex, 
-                    email, 
-                    location, 
-                    phone_number,
-                    email_notifications,
-                    sms_notifications,
-                    credit_score,
-                    phone_verified
-                ) VALUES (
-                    :username, 
-                    :password, 
-                    :status, 
-                    :sex, 
-                    :email, 
-                    :location, 
-                    :phone_number,
-                    1,
-                    0,
-                    100.00,
-                    :phone_verified
-                )";
-                
-                $phoneVerified = $otpVerified ? 1 : 0;
-                
-                $stmt = $db->prepare($query);
-                $stmt->bindParam(':username', $formData['username']);
-                $stmt->bindParam(':password', $hashedPassword);
-                $stmt->bindParam(':status', $status);
-                $stmt->bindParam(':sex', $sex);
-                $stmt->bindParam(':email', $formData['email']);
-                $stmt->bindParam(':location', $formData['location']);
-                $stmt->bindParam(':phone_number', $formData['phone_number']);
-                $stmt->bindParam(':phone_verified', $phoneVerified);
-                
-                if ($stmt->execute()) {
-                    $userId = $db->lastInsertId();
-                    
-                    if ($status === 'property_owner') {
-                        $ownerStmt = $db->prepare("INSERT INTO property_owners (owner_id) VALUES (:user_id)");
-                        $ownerStmt->bindParam(':user_id', $userId);
-                        $ownerStmt->execute();
-                    }
-                    
-                    $db->commit();
-                    
-                    // Clean up session data
-                    unset($_SESSION['otp_verified']);
-                    unset($_SESSION['registration_phone']);
-                    unset($_SESSION['verified_phone']);
-                    
-                    header('Location: login.php?success=1');
+                // Store form data in session for later use
+                $_SESSION['pending_registration'] = [
+                    'username' => $formData['username'],
+                    'email' => $formData['email'],
+                    'password' => password_hash($password, PASSWORD_DEFAULT),
+                    'status' => $status,
+                    'sex' => $sex,
+                    'location' => $formData['location'],
+                    'phone_number' => $formData['phone_number']
+                ];
+
+                // Role-based redirection
+                if ($status === 'student') {
+                    // Students need to pay subscription
+                    header('Location: register.php?step=payment');
                     exit();
                 } else {
-                    throw new Exception("Failed to execute user insertion query");
+                    // Property owners and admins are saved directly to database
+                    try {
+                        $db->beginTransaction();
+                        
+                        // Create the user account directly
+                        $query = "INSERT INTO users (
+                            username, 
+                            pwd, 
+                            status, 
+                            sex, 
+                            email, 
+                            location, 
+                            phone_number,
+                            email_notifications,
+                            sms_notifications,
+                            credit_score,
+                            phone_verified,
+                            subscription_status,
+                            subscription_expires_at
+                        ) VALUES (
+                            :username, 
+                            :password, 
+                            :status, 
+                            :sex, 
+                            :email, 
+                            :location, 
+                            :phone_number,
+                            1,
+                            0,
+                            100.00,
+                            1,
+                            'active',
+                            NULL
+                        )";
+                        
+                        $stmt = $db->prepare($query);
+                        $stmt->bindParam(':username', $formData['username']);
+                        $stmt->bindParam(':password', $_SESSION['pending_registration']['password']);
+                        $stmt->bindParam(':status', $status);
+                        $stmt->bindParam(':sex', $sex);
+                        $stmt->bindParam(':email', $formData['email']);
+                        $stmt->bindParam(':location', $formData['location']);
+                        $stmt->bindParam(':phone_number', $formData['phone_number']);
+                        
+                        if ($stmt->execute()) {
+                            $userId = $db->lastInsertId();
+                            
+                            // Create property owner record if needed
+                            if ($status === 'property_owner') {
+                                $ownerStmt = $db->prepare("INSERT INTO property_owners (owner_id) VALUES (:user_id)");
+                                $ownerStmt->bindParam(':user_id', $userId);
+                                $ownerStmt->execute();
+                            }
+                            
+                            $db->commit();
+                            
+                            // Clear session data
+                            unset($_SESSION['pending_registration']);
+                            
+                            // Redirect based on user type
+                            if ($status === 'property_owner') {
+                                header('Location: login.php?success=1&message=Property owner account created successfully');
+                            } elseif ($status === 'admin') {
+                                header('Location: login.php?success=1&message=Admin account created successfully');
+                            } else {
+                                header('Location: login.php?success=1');
+                            }
+                            exit();
+                        } else {
+                            throw new Exception("Failed to create user account");
+                        }
+                    } catch(Exception $e) {
+                        if (isset($db)) {
+                            $db->rollBack();
+                        }
+                        $errors['system'] = 'Database error: ' . $e->getMessage();
+                        error_log("Registration Error: " . $e->getMessage());
+                    }
                 }
             }
         } catch(Exception $e) {
-            if (isset($db)) {
-                $db->rollBack();
-            }
             $errors['system'] = 'A system error occurred. Please try again later.';
             error_log("Registration Error: " . $e->getMessage());
-        }
+        }            
+    }
+}
+
+// Handle payment step
+if (isset($_GET['step']) && $_GET['step'] === 'payment') {
+    if (isset($_SESSION['pending_registration']) && !empty($_SESSION['pending_registration']['email'])) {
+        $step = 'payment';
+        $registrationData = $_SESSION['pending_registration'];
+        $formData['email'] = $registrationData['email'];
+    } else {
+        // Session data is missing, go back to form
+        $errors['system'] = 'Registration data missing. Please fill out the form again.';
+        $step = 'form';
+        error_log("Missing pending_registration session data");
+        
+        // Clear invalid session data
+        unset($_SESSION['pending_registration']);
     }
 }
 ?>
@@ -310,6 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['ajax'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register | Landlords&Tenants</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://js.paystack.co/v1/inline.js"></script>
     <style>
         :root {
             --primary-color: #3498db;
@@ -605,62 +699,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['ajax'])) {
             background-color: var(--success-color);
             color: white;
         }
-
-        .otp-container {
+        
+        .payment-container {
             text-align: center;
             padding: 2rem 0;
         }
-
-        .otp-input {
-            font-size: 1.5rem;
-            text-align: center;
-            letter-spacing: 0.5rem;
-            max-width: 200px;
-            margin: 1rem auto;
-        }
-
-        .timer-display {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: var(--accent-color);
-            margin: 1rem 0;
-        }
-
-        .timer-display.expired {
-            color: #dc3545;
-        }
-
-        .fallback-otp {
+        
+        .subscription-card {
             background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 2rem;
+            margin: 1rem 0;
             border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
-            margin: 15px 0;
-            text-align: center;
-            font-size: 1.2rem;
+        }
+        
+        .subscription-price {
+            font-size: 2rem;
             font-weight: bold;
             color: var(--primary-color);
         }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 1rem;
+        
+        .subscription-duration {
+            color: #6c757d;
+            margin-bottom: 1rem;
         }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid var(--primary-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 2s linear infinite;
-            margin: 0 auto 1rem;
+        
+        .subscription-features {
+            text-align: left;
+            margin: 1rem 0;
         }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        
+        .subscription-features li {
+            margin-bottom: 0.5rem;
+            list-style-type: none;
+            position: relative;
+            padding-left: 1.5rem;
+        }
+        
+        .subscription-features li:before {
+            content: '✓';
+            color: var(--success-color);
+            position: absolute;
+            left: 0;
         }
 
         /* Responsive Design */
@@ -727,21 +807,36 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['ajax'])) {
                             <i class="fas fa-user"></i>
                             <span>Details</span>
                         </div>
-                        <div class="step <?php echo $step === 'otp' ? 'active' : ($step === 'subscription' ? 'completed' : ''); ?>">
-                            <i class="fas fa-mobile-alt"></i>
-                            <span>Verify</span>
+                        <div class="step <?php echo $step === 'payment' ? 'active' : ''; ?>">
+                            <i class="fas fa-credit-card"></i>
+                            <span>Payment</span>
                         </div>
                     </div>
 
                     <?php if (isset($_GET['success']) && $_GET['success'] == 1): ?>
                         <div class="alert alert-success">
-                            <i class="fas fa-check-circle"></i> Registration successful! You can now login.
+                            <i class="fas fa-check-circle"></i> 
+                            <?php 
+                            if (isset($_GET['subscribed']) && $_GET['subscribed'] == 1) {
+                                echo 'Registration and payment successful! Your subscription is active for 8 months. You can now login.';
+                            } elseif (isset($_GET['message'])) {
+                                echo htmlspecialchars($_GET['message']) . ' You can now login.';
+                            } else {
+                                echo 'Registration successful! You can now login.';
+                            }
+                            ?>
                         </div>
                     <?php endif; ?>
                     
                     <?php if (isset($errors['system'])): ?>
                         <div class="alert alert-danger">
                             <i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($errors['system']); ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <?php if (isset($errors['payment'])): ?>
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($errors['payment']); ?>
                         </div>
                     <?php endif; ?>
 
@@ -850,40 +945,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['ajax'])) {
                         </div>
                         
                         <div class="form-group">
-                            <button type="button" id="sendOtpBtn" class="btn">Send OTP</button>
+                            <button type="submit" class="btn">Register</button>
                         </div>
                         <?php endif; ?>
-
-                        <?php if ($step === 'otp'): ?>
-                        <div class="otp-container">
-                            <h3>Verify Your Phone Number</h3>
-                            <p>We've sent a verification code to your phone number</p>
-                            <p><strong>Time limit: 30 seconds</strong></p>
+                        
+                        <?php if ($step === 'payment'): ?>
+                        <div class="payment-container">
+                            <h3>Complete Your Subscription</h3>
+                            <p>To access all features, please subscribe to our platform</p>
                             
-                            <div id="timerDisplay" class="timer-display">Time remaining: <span id="countdown">30</span> seconds</div>
-                            
-                            <div id="fallbackOtpDisplay" class="fallback-otp" style="display: none;">
-                                Your OTP: <span id="fallbackOtpCode"></span>
+                            <div class="subscription-card">
+                                <h4>Premium Subscription</h4>
+                                <div class="subscription-price">GHS 20</div>
+                                <div class="subscription-duration">8 Months Access</div>
+                                
+                                <ul class="subscription-features">
+                                    <li>Full access to property listings</li>
+                                    <li>Direct messaging with landlords/tenants</li>
+                                    <li>Priority support</li>
+                                    <li>No advertisements</li>
+                                    <li>Enhanced visibility for your listings</li>
+                                </ul>
+                                
+                                <button type="button" id="paystack-btn" class="btn">
+                                    <i class="fas fa-credit-card"></i> Pay with Paystack
+                                </button>
                             </div>
                             
-                            <div class="form-group">
-                                <input type="text" id="otp_code" class="form-control otp-input" 
-                                       placeholder="Enter OTP" maxlength="6" required>
-                                <span id="otpError" class="text-danger" style="display: none;"></span>
-                                <span id="otpSuccess" class="text-success" style="display: none;"></span>
-                            </div>
-                            
-                            <div class="form-group">
-                                <button type="button" id="verifyOtpBtn" class="btn">Verify OTP</button>
-                            </div>
-                            
-                            <div class="form-group">
-                                <button type="button" id="resendOtpBtn" class="btn btn-warning" style="display: none;">Resend OTP</button>
-                            </div>
-                            
-                            <div class="form-group">
-                                <button type="submit" id="submitBtn" class="btn btn-success" style="display: none;">Complete Registration</button>
-                            </div>
+                            <p class="text-muted">You will be redirected to Paystack to complete your payment</p>
                         </div>
                         <?php endif; ?>
                     </form>
@@ -904,281 +993,61 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['ajax'])) {
         </div>
     </footer>
 
+    <script src="https://js.paystack.co/v1/inline.js"></script>
     <script>
         // Registration form handling
         document.addEventListener('DOMContentLoaded', function() {
-            const sendOtpBtn = document.getElementById('sendOtpBtn');
-            const verifyOtpBtn = document.getElementById('verifyOtpBtn');
-            const resendOtpBtn = document.getElementById('resendOtpBtn');
-            const submitBtn = document.getElementById('submitBtn');
-            const otpError = document.getElementById('otpError');
-            const otpSuccess = document.getElementById('otpSuccess');
-            const timerDisplay = document.getElementById('timerDisplay');
-            const countdown = document.getElementById('countdown');
-            const fallbackOtpDisplay = document.getElementById('fallbackOtpDisplay');
-            const fallbackOtpCode = document.getElementById('fallbackOtpCode');
-            
-            let otpTimer = null;
-            let timeRemaining = 30;
-
-            // Send OTP
-            if (sendOtpBtn) {
-                sendOtpBtn.addEventListener('click', function() {
-                    const phoneNumber = document.getElementById('phone_number').value;
-                    const status = document.querySelector('input[name="status"]:checked').value;
+            // Paystack payment integration
+            const paystackBtn = document.getElementById('paystack-btn');
+            if (paystackBtn) {
+                paystackBtn.addEventListener('click', function() {
+                    const userEmail = <?php echo isset($_SESSION['pending_registration']['email']) ? json_encode($_SESSION['pending_registration']['email']) : 'null'; ?>;
+                    const adminPhone = '<?php echo htmlspecialchars($admin_phone, ENT_QUOTES, 'UTF-8'); ?>';
                     
-                    if (!phoneNumber) {
-                        alert('Please enter your phone number');
+                    // Validate email before proceeding
+                    if (!userEmail || userEmail.trim() === '') {
+                        alert('User email is required for payment processing. Please go back and ensure your email is entered.');
+                        window.location.href = 'register.php?step=form';
                         return;
                     }
-
-                    // Only require OTP for students and property owners
-                    if (status !== 'student' && status !== 'property_owner') {
-                        // Submit form directly for other user types
-                        document.getElementById('registrationForm').submit();
-                        return;
-                    }
-
-                    sendOtpBtn.disabled = true;
-                    sendOtpBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
-
-                    fetch('register.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
+                    
+                    console.log('Processing payment for email:', userEmail);
+                    
+                    // Create payment with Paystack
+                    const handler = PaystackPop.setup({
+                        key: '<?php echo PAYSTACK_PUBLIC_KEY; ?>',
+                        email: userEmail,
+                        amount: 2000, // 20 GHS in kobo
+                        currency: 'GHS',
+                        ref: 'SUB' + Math.floor((Math.random() * 1000000000) + 1),
+                        metadata: {
+                            custom_fields: [
+                                {
+                                    display_name: "User Email",
+                                    variable_name: "user_email",
+                                    value: userEmail
+                                },
+                                {
+                                    display_name: "Admin Phone",
+                                    variable_name: "admin_phone",
+                                    value: adminPhone
+                                },
+                                {
+                                    display_name: "Registration Type",
+                                    variable_name: "registration_type",
+                                    value: "subscription_payment"
+                                }
+                            ]
                         },
-                        body: `ajax=1&action=send_otp&phone_number=${encodeURIComponent(phoneNumber)}`
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.text();
-                    })
-                    .then(text => {
-                        let data;
-                        try {
-                            data = JSON.parse(text);
-                        } catch (e) {
-                            console.error('Invalid JSON response:', text);
-                            throw new Error('Server returned invalid JSON response');
-                        }
-                        
-                        if (data.success) {
-                            if (data.fallback) {
-                                // Show the fallback OTP to the user
-                                fallbackOtpCode.textContent = data.otp_code;
-                                fallbackOtpDisplay.style.display = 'block';
-                            }
-                            
-                            // Store form data and redirect to OTP step
-                            const formData = new FormData(document.getElementById('registrationForm'));
-                            const params = new URLSearchParams();
-                            for (let [key, value] of formData.entries()) {
-                                params.append(key, value);
-                            }
-                            params.set('step', 'otp');
-                            
-                            window.location.href = 'register.php?' + params.toString();
-                        } else {
-                            alert(data.message || 'Failed to send OTP');
-                            sendOtpBtn.disabled = false;
-                            sendOtpBtn.innerHTML = 'Send OTP';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('An error occurred: ' + error.message);
-                        sendOtpBtn.disabled = false;
-                        sendOtpBtn.innerHTML = 'Send OTP';
-                    });
-                });
-            }
-
-            // Start timer for OTP page
-            if (countdown && timerDisplay) {
-                startOtpTimer();
-            }
-
-            // Verify OTP
-            if (verifyOtpBtn) {
-                verifyOtpBtn.addEventListener('click', function() {
-                    const otpCode = document.getElementById('otp_code').value;
-                    const phoneNumber = '<?php echo isset($_SESSION['registration_phone']) ? htmlspecialchars($_SESSION['registration_phone']) : ''; ?>';
-                    
-                    if (!otpCode) {
-                        showOtpError('Please enter the OTP code');
-                        return;
-                    }
-
-                    if (otpCode.length !== 6) {
-                        showOtpError('OTP must be 6 digits');
-                        return;
-                    }
-
-                    verifyOtpBtn.disabled = true;
-                    verifyOtpBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
-
-                    fetch('register.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
+                        callback: function(response) {
+                            console.log('Payment successful:', response);
+                            window.location.href = 'register.php?paystack_callback=true&reference=' + response.reference;
                         },
-                        body: `ajax=1&action=verify_otp&phone_number=${encodeURIComponent(phoneNumber)}&otp_code=${encodeURIComponent(otpCode)}`
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            showOtpSuccess('OTP verified successfully!');
-                            clearInterval(otpTimer);
-                            verifyOtpBtn.style.display = 'none';
-                            if (resendOtpBtn) resendOtpBtn.style.display = 'none';
-                            if (submitBtn) submitBtn.style.display = 'block';
-                            timerDisplay.style.display = 'none';
-                        } else {
-                            showOtpError(data.message || 'Invalid OTP code');
-                            verifyOtpBtn.disabled = false;
-                            verifyOtpBtn.innerHTML = 'Verify OTP';
-                            
-                            if (data.expired) {
-                                clearInterval(otpTimer);
-                                showResendButton();
-                            }
+                        onClose: function() {
+                            alert('Payment was cancelled. Please complete your subscription to access the platform.');
                         }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        showOtpError('An error occurred. Please try again.');
-                        verifyOtpBtn.disabled = false;
-                        verifyOtpBtn.innerHTML = 'Verify OTP';
                     });
-                });
-            }
-
-            // Resend OTP
-            if (resendOtpBtn) {
-                resendOtpBtn.addEventListener('click', function() {
-                    const phoneNumber = '<?php echo isset($_SESSION['registration_phone']) ? htmlspecialchars($_SESSION['registration_phone']) : ''; ?>';
-                    
-                    resendOtpBtn.disabled = true;
-                    resendOtpBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resending...';
-
-                    fetch('register.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                        },
-                        body: `ajax=1&action=send_otp&phone_number=${encodeURIComponent(phoneNumber)}`
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            showOtpSuccess('OTP resent successfully!');
-                            
-                            if (data.fallback) {
-                                fallbackOtpCode.textContent = data.otp_code;
-                                fallbackOtpDisplay.style.display = 'block';
-                            }
-                            
-                            // Restart timer
-                            timeRemaining = 30;
-                            startOtpTimer();
-                            resendOtpBtn.style.display = 'none';
-                            verifyOtpBtn.style.display = 'block';
-                            verifyOtpBtn.disabled = false;
-                            timerDisplay.style.display = 'block';
-                        } else {
-                            showOtpError(data.message || 'Failed to resend OTP');
-                        }
-                        resendOtpBtn.disabled = false;
-                        resendOtpBtn.innerHTML = 'Resend OTP';
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        showOtpError('An error occurred. Please try again.');
-                        resendOtpBtn.disabled = false;
-                        resendOtpBtn.innerHTML = 'Resend OTP';
-                    });
-                });
-            }
-
-            function startOtpTimer() {
-                if (otpTimer) {
-                    clearInterval(otpTimer);
-                }
-                
-                timeRemaining = 30;
-                updateTimerDisplay();
-                
-                otpTimer = setInterval(function() {
-                    timeRemaining--;
-                    updateTimerDisplay();
-                    
-                    if (timeRemaining <= 0) {
-                        clearInterval(otpTimer);
-                        handleTimerExpired();
-                    }
-                }, 1000);
-            }
-
-            function updateTimerDisplay() {
-                if (countdown) {
-                    countdown.textContent = timeRemaining;
-                    
-                    if (timeRemaining <= 10) {
-                        timerDisplay.classList.add('expired');
-                    } else {
-                        timerDisplay.classList.remove('expired');
-                    }
-                }
-            }
-
-            function handleTimerExpired() {
-                if (timerDisplay) {
-                    timerDisplay.innerHTML = '<i class="fas fa-exclamation-triangle"></i> OTP has expired';
-                    timerDisplay.classList.add('expired');
-                }
-                
-                showOtpError('OTP has expired. Please request a new one.');
-                showResendButton();
-            }
-
-            function showResendButton() {
-                if (verifyOtpBtn) verifyOtpBtn.style.display = 'none';
-                if (resendOtpBtn) resendOtpBtn.style.display = 'block';
-            }
-
-            function showOtpError(message) {
-                if (otpError) {
-                    otpError.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + message;
-                    otpError.style.display = 'block';
-                    if (otpSuccess) otpSuccess.style.display = 'none';
-                }
-            }
-
-            function showOtpSuccess(message) {
-                if (otpSuccess) {
-                    otpSuccess.innerHTML = '<i class="fas fa-check-circle"></i> ' + message;
-                    otpSuccess.style.display = 'block';
-                    if (otpError) otpError.style.display = 'none';
-                }
-            }
-
-            // Auto-focus on OTP input
-            const otpInput = document.getElementById('otp_code');
-            if (otpInput) {
-                otpInput.focus();
-                
-                // Auto-submit when 6 digits are entered
-                otpInput.addEventListener('input', function() {
-                    // Only allow numbers
-                    this.value = this.value.replace(/[^0-9]/g, '');
-                    
-                    if (this.value.length === 6) {
-                        if (verifyOtpBtn && !verifyOtpBtn.disabled) {
-                            verifyOtpBtn.click();
-                        }
-                    }
+                    handler.openIframe();
                 });
             }
 

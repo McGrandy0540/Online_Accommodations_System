@@ -1,0 +1,73 @@
+# =====================================================
+# ONLINE ACCOMMODATION SYSTEM - DATABASE EXPORT COMMANDS
+# =====================================================
+# Database: online_accommodations_system
+# Host: localhost
+# Username: root
+# Password: mcgrandy0408
+# =====================================================
+
+# METHOD 1: Complete Database Export (Structure + Data)
+# Run this command in Command Prompt/Terminal:
+mysqldump -u root -p online_accommodations_system > online_accommodations_system_complete_backup.sql
+
+# METHOD 2: Export only database structure (no data)
+mysqldump -u root -p --no-data online_accommodations_system > online_accommodations_system_structure_only.sql
+
+# METHOD 3: Export only data (no structure)
+mysqldump -u root -p --no-create-info online_accommodations_system > online_accommodations_system_data_only.sql
+
+# METHOD 4: Export specific tables
+mysqldump -u root -p online_accommodations_system users properties rooms bookings > specific_tables_backup.sql
+
+# METHOD 5: Export with additional options (recommended)
+mysqldump -u root -p --single-transaction --routines --triggers --events online_accommodations_system > online_accommodations_system_full_backup.sql
+
+# METHOD 6: Export compressed backup
+mysqldump -u root -p online_accommodations_system | gzip > online_accommodations_system_backup.sql.gz
+
+# =====================================================
+# MYSQL WORKBENCH EXPORT STEPS:
+# =====================================================
+# 1. Open MySQL Workbench
+# 2. Connect to your database server
+# 3. Go to "Server" menu → "Data Export"
+# 4. Select "online_accommodations_system" database
+# 5. Choose export options:
+#    - Export to Dump Project Folder (recommended)
+#    - Include Create Schema
+#    - Export to Self-Contained File
+# 6. Select all tables or specific tables you want
+# 7. Click "Start Export"
+
+# =====================================================
+# COMMAND LINE EXPORT (Windows)
+# =====================================================
+# Open Command Prompt as Administrator and run:
+cd "C:\Program Files\MySQL\MySQL Server 8.0\bin"
+mysqldump -u root -p online_accommodations_system > C:\backup\online_accommodations_system_backup.sql
+
+# =====================================================
+# IMPORT COMMANDS (for restoring the database)
+# =====================================================
+# To restore the database from backup:
+mysql -u root -p online_accommodations_system < online_accommodations_system_backup.sql
+
+# To create new database and import:
+mysql -u root -p -e "CREATE DATABASE online_accommodations_system_new;"
+mysql -u root -p online_accommodations_system_new < online_accommodations_system_backup.sql
+
+# =====================================================
+# AUTOMATED BACKUP SCRIPT (Windows Batch)
+# =====================================================
+# Create a .bat file with this content:
+@echo off
+set MYSQL_PATH="C:\Program Files\MySQL\MySQL Server 8.0\bin"
+set BACKUP_PATH="C:\backup"
+set DATE=%date:~-4,4%%date:~-10,2%%date:~-7,2%
+set TIME=%time:~0,2%%time:~3,2%%time:~6,2%
+set FILENAME=online_accommodations_system_%DATE%_%TIME%.sql
+
+%MYSQL_PATH%\mysqldump -u root -p online_accommodations_system > %BACKUP_PATH%\%FILENAME%
+echo Backup completed: %FILENAME%
+pause

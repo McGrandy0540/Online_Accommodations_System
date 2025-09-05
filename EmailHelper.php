@@ -28,6 +28,48 @@ class EmailHelper
     }
     
     /**
+     * Get property owner email by their ID
+     */
+    public static function getPropertyOwnerEmail($owner_id) {
+        try {
+            $pdo = Database::getInstance();
+            $stmt = $pdo->prepare("SELECT email FROM users WHERE id = ? AND status = 'property_owner' AND email IS NOT NULL AND email != ''");
+            $stmt->execute([$owner_id]);
+            $owner = $stmt->fetch();
+            
+            if ($owner && !empty($owner['email']) && filter_var($owner['email'], FILTER_VALIDATE_EMAIL)) {
+                return $owner['email'];
+            }
+        } catch (Exception $e) {
+            error_log("Failed to get property owner email from database: " . $e->getMessage());
+        }
+        
+        // Fallback to default admin email if property owner email not found
+        return DEFAULT_ADMIN_EMAIL;
+    }
+    
+    /**
+     * Get user email by their ID (works for any user type)
+     */
+    public static function getUserEmail($user_id) {
+        try {
+            $pdo = Database::getInstance();
+            $stmt = $pdo->prepare("SELECT email FROM users WHERE id = ? AND email IS NOT NULL AND email != ''");
+            $stmt->execute([$user_id]);
+            $user = $stmt->fetch();
+            
+            if ($user && !empty($user['email']) && filter_var($user['email'], FILTER_VALIDATE_EMAIL)) {
+                return $user['email'];
+            }
+        } catch (Exception $e) {
+            error_log("Failed to get user email from database: " . $e->getMessage());
+        }
+        
+        // Return null if user email not found
+        return null;
+    }
+    
+    /**
      * Check email rate limiting
      */
     public static function checkRateLimit($ip_address) {

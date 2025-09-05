@@ -226,7 +226,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
         }
 
         .logo img {
-            height: 36px;
+            height: 56px;
             margin-right: 10px;
         }
 
@@ -914,7 +914,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             }
             
             .logo img {
-                height: 30px;
+                height: 40px;
             }
         }
     </style>
@@ -924,7 +924,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     <header class="main-header">
         <div class="header-container">
             <a href="../../" class="logo">
-                <img src="../../assets/images/ktu logo.png" alt="landlords&tenants Logo">
+                <img src="../../assets/images/landlords-logo.png" alt="landlords&tenants Logo">
                 <span>landlords&tenants</span>
             </a>
             

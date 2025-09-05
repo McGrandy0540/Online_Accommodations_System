@@ -687,7 +687,7 @@ $earnings = $earnings_stmt->fetch();
     <header class="main-header">
         <div class="header-container">
             <a href="../../" class="logo">
-                <img src="../assets/images/logo-removebg-preview.png" alt="UniHomes Logo">
+                <img src="../assets/images/landlords-logo2.png" alt="UniHomes Logo">
                 <span>Landlords&Tenant</span>
             </a>
             

@@ -1073,7 +1073,7 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
     <header class="main-header">
         <div class="header-container">
             <a href="../" class="logo">
-                <img src="../assets/images/logo-removebg-preview.png" alt="Landlords&Tenant Logo">
+                <img src="../assets/images/landlords-logo.png" alt="Landlords&Tenant Logo">
                 <span>landlords&Tenants</span>
             </a>
             
@@ -1130,6 +1130,8 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                     <li><a href="profile/index.php"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
                     <li><a href="notification/"><i class="fas fa-bell"></i> <span class="menu-text">Notifications</span></a></li>
                     <li><a href="sms/"><i class="fas fa-sms"></i> <span class="menu-text">SMS Settings</span></a></li>
+                    <li><a href="uploadfile.php"><i class="fas fa-file"></i> <span class="menu-text">Upload Document</span></a></li>
+                    <li><a href="tenancy_agreements_document.php"><i class="fas fa-check"></i> <span class="menu-text">Tenancy Agreements</span></a></li>
                 </ul>
             </div>
         </div>

@@ -347,6 +347,25 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             width: 100%;
         }
 
+        .logo {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: white;
+            font-weight: 600;
+            font-size: 1.4rem;
+        }
+
+        .logo img {
+            height: 100px;
+            margin-right: 10px;
+        }
+        
+        
+        .header-content h1{
+            color: var(--light-color);
+        }
+
         .user-info {
             display: flex;
             align-items: center;
@@ -806,6 +825,13 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             .carousel-container {
                 height: 250px;
             }
+                        .logo {
+                font-size: 1.2rem;
+            }
+            
+            .logo img {
+                height: 30px;
+            }
         }
     </style>
 </head>
@@ -836,7 +862,9 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
     <div class="main-content">
         <header>
             <div class="container header-content">
-                <h1>Student Accommodation Reviews</h1>
+                <a href="../" class="logo">
+                    <img src="../../assets/images/landlords-logo.png" alt="Landlords&Tenant Logo"> <span>Tenant Accommodation Reviews</span>
+                </a>
                 <div class="user-info">
                         <?php if (!empty($profile_pic_path)): ?>
                             <img src="<?= htmlspecialchars($profile_pic_path) ?>" alt="User Profile">

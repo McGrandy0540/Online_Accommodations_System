@@ -508,7 +508,7 @@ function getProfilePicturePath($path) {
         <div class="booking-header text-center">
             <div class="d-flex justify-content-center mb-4">
                 <a href="../../" class="d-inline-block">
-                    <img src="../../assets/images/logo-removebg-preview.png" alt="UniHomes Logo" height="60">
+                    <img src="../../assets/images/landlords-logo.png" alt="UniHomes Logo" height="100"  >
                 </a>
             </div>
             <h1 class="mb-3">New Accommodation Booking</h1>

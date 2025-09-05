@@ -78,7 +78,7 @@ $postvars = rtrim($postvars, '&');
 $curl = curl_init();
 curl_setopt_array($curl, array(
     CURLOPT_URL => 'https://sms.arkesel.com/api/otp/generate',
-    CURLOPT_HTTPHEADER => array('api-key: ZWVKT1VnSnlNWXFWVkhKUlFQcUs'),
+    CURLOPT_HTTPHEADER => array('api-key: SWlWeGFwcWJLalVKSkdrcFJ0dlk'),
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_ENCODING => '',
     CURLOPT_MAXREDIRS => 10,

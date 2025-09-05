@@ -68,8 +68,8 @@ CREATE TABLE IF NOT EXISTS subscription_payment_logs (
 
 -- Insert default subscription plan
 INSERT INTO subscription_plans (plan_name, duration_months, price, description) 
-VALUES ('Student Subscription', 8, 50.00, '8-month access to accommodation platform for students')
-ON DUPLICATE KEY UPDATE plan_name = plan_name;
+VALUES ('Student Subscription', 8, 20.00, '8-month access to accommodation platform for students')
+ON DUPLICATE KEY UPDATE price = 20.00, description = '8-month access to accommodation platform for students';
 
 -- Add subscription-related columns to users table if they don't exist
 ALTER TABLE users 

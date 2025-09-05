@@ -236,7 +236,7 @@ $unread_notifications = $notifications_stmt->fetchAll();
         }
         
         .logo img {
-            height: 40px;
+            height: 100px;
             margin-right: 10px;
         }
         
@@ -660,7 +660,7 @@ $unread_notifications = $notifications_stmt->fetchAll();
     <header class="main-header">
         <div class="header-container">
             <a href="../../" class="logo">
-                <img src="../../assets/images/logo-removebg-preview.png" alt="Landlords&Tenants Logo">
+                <img src="../../assets/images/landlords-logo2.png" alt="Landlords&Tenants Logo">
                 <span>Landlords&Tenants</span>
             </a>
             

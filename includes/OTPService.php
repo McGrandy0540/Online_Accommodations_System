@@ -4,15 +4,11 @@ class OTPService {
     private $apiKey;
     private $baseUrl;
     private $db;
-
-
-
     
     public function __construct() {
-        $this->apiKey = 'ZWVKT1VnSnlNWXFWVkhKUlFQcUs'; // Your Arkesel OTP API key
+        $this->apiKey = 'SWlWeGFwcWJLalVKSkdrcFJ0dlk'; // Your Arkesel OTP API key
         $this->baseUrl = 'https://sms.arkesel.com/api/otp';
         $this->db = Database::getInstance();
-        
     }
     
     /**
@@ -160,35 +156,30 @@ class OTPService {
                 'expiry' => 5,
                 'length' => 6,
                 'medium' => 'sms',
-                'message' => 'Your verification code is,',
+                'message' => 'Your verification code Landlords is,  %otp_code%',
                 'number' => $phoneNumber,
                 'sender_id' => 'Landlords',
-                'type' => 'numeric'
+                'type' => 'numeric',
             ];
-
-            echo "fields: " . print_r($fields, true);
+            
             $postvars = '';
             foreach($fields as $key => $value) {
-                $postvars .= $key . "=" . urlencode($value) . "&";
+                $postvars .= $key . "=" . $value . "&";
             }
-            $postvars = rtrim($postvars, '&');
-            echo "postvar:". print_r($postvars, true);
             
             $curl = curl_init();
-            curl_setopt_array($curl, array(
+                $curl = curl_init();
+                curl_setopt_array($curl, array(
                 CURLOPT_URL => 'https://sms.arkesel.com/api/otp/generate',
-                CURLOPT_HTTPHEADER => array('api-key: ' . $this->apiKey),
+                CURLOPT_HTTPHEADER => array('api-key: SWlWeGFwcWJLalVKSkdrcFJ0dlk'),
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_ENCODING => '',
                 CURLOPT_MAXREDIRS => 10,
                 CURLOPT_TIMEOUT => 10,
-                CURLOPT_CONNECTTIMEOUT => 10,
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
                 CURLOPT_POST => 1,
                 CURLOPT_POSTFIELDS => $postvars,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
             ));
             
             $response = curl_exec($curl);
@@ -199,31 +190,18 @@ class OTPService {
             // Log the response for debugging
             error_log("Arkesel OTP API Response: " . $response);
             error_log("HTTP Code: " . $httpCode);
-            
             if ($curlError) {
                 error_log("CURL Error: " . $curlError);
+            }
+            
+            if ($response === false) {
                 return [
                     'success' => false,
                     'message' => 'Failed to connect to SMS API: ' . $curlError
                 ];
             }
             
-            if ($response === false) {
-                return [
-                    'success' => false,
-                    'message' => 'Failed to get response from SMS API'
-                ];
-            }
-            
             $responseData = json_decode($response, true);
-            
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                error_log("JSON Decode Error: " . json_last_error_msg());
-                return [
-                    'success' => false,
-                    'message' => 'Invalid response format from SMS API'
-                ];
-            }
             
             if ($httpCode === 200 && $responseData) {
                 if (isset($responseData['status']) && $responseData['status'] === 'success') {
@@ -239,13 +217,9 @@ class OTPService {
                     ];
                 }
             } else {
-                $errorMessage = 'SMS API request failed with HTTP code: ' . $httpCode;
-                if ($responseData && isset($responseData['message'])) {
-                    $errorMessage .= ' - ' . $responseData['message'];
-                }
                 return [
                     'success' => false,
-                    'message' => $errorMessage
+                    'message' => 'SMS API request failed with HTTP code: ' . $httpCode
                 ];
             }
             
@@ -396,7 +370,7 @@ class OTPService {
     private function verifyOTPWithAPI($phoneNumber, $otpCode) {
         try {
             $fields = [
-                'api_key' => $this->apiKey,
+                'api_key' => 'SWlWeGFwcWJLalVKSkdrcFJ0dlk',
                 'code' => $otpCode,
                 'number' => $phoneNumber,
             ];
@@ -408,19 +382,16 @@ class OTPService {
             
             $curl = curl_init();
             curl_setopt_array($curl, array(
-                CURLOPT_URL => 'https://sms.arkesel.com/api/otp/verify',
-                CURLOPT_HTTPHEADER => array('api-key: ' . $this->apiKey),
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_ENCODING => '',
-                CURLOPT_MAXREDIRS => 7,
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_CONNECTTIMEOUT => 10,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                CURLOPT_POST => 1,
-                CURLOPT_POSTFIELDS => $postvars,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_URL => 'https://sms.arkesel.com/api/otp/verify',
+            CURLOPT_HTTPHEADER => array('api-key: SWlWeGFwcWJLalVKSkdrcFJ0dlk'),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_POST => 1,
+            CURLOPT_POSTFIELDS => $postvars,
             ));
             
             $response = curl_exec($curl);

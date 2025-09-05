@@ -618,7 +618,7 @@ $current_report_title = $report_titles[$report_type] ?? 'Reports Dashboard';
     <header class="main-header">
         <div class="header-container">
             <a href="../../" class="logo">
-                <img src="../assets/images/ktu logo.png" alt="landlords&tenants Logo">
+                <img src="../assets/images/landlords-logo2.png" alt="landlords&tenants Logo">
                 <span>Landlords&Tenant</span>
             </a>
             

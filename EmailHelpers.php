@@ -4,12 +4,12 @@
  * Provides utility functions for email operations
  */
 
-class EmailHelper 
+class EmailHelpers 
 {
     /**
-     * Get admin email from database with fallback
+     * Get property owner email from database with fallback
      */
-    public static function getAdminEmail() {
+    public static function getPropertyOwnerEmail() {
         try {
             $pdo = Database::getInstance();
             $stmt = $pdo->prepare("SELECT email FROM users WHERE status = 'property_owner' AND email IS NOT NULL AND email != '' ORDER BY id ASC LIMIT 1");
@@ -20,7 +20,7 @@ class EmailHelper
                 return $owner['email'];
             }
         } catch (Exception $e) {
-            error_log("Failed to get admin email from database: " . $e->getMessage());
+            error_log("Failed to get property owner email from database: " . $e->getMessage());
         }
         
         // Fallback to default admin email

@@ -269,7 +269,7 @@ $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '')
         }
 
         .logo img {
-            height: 40px;
+            height: 80px;
             margin-right: 10px;
         }
 
@@ -579,7 +579,7 @@ $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '')
                     </button>
                     
                     <a href="../dashbord.php" class="logo">
-                        <img src="../../assets/images/logo-removebg-preview.png" alt="Logo">
+                        <img src="../../assets/images/landlords-logo2.png" alt="Logo">
                         <span>Landlords&Tenant</span>
                     </a>
                     

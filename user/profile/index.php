@@ -226,7 +226,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         }
 
         .logo img {
-            height: 36px;
+            height: 60px;
             margin-right: 10px;
         }
 
@@ -824,7 +824,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
     <header class="main-header">
         <div class="header-container">
             <a href="../" class="logo">
-                <img src="../../assets/images/logo-removebg-preview.png" alt="Landlords&Tenant Logo">
+                <img src="../../assets/images/landlords-logo.png" alt="Landlords&Tenant Logo">
                 <span>Landlords&Tenant</span>
             </a>
             

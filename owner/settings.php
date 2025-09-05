@@ -247,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_notifications'
         }
 
         .logo img {
-            height: 36px;
+            height: 56px;
             margin-right: 10px;
         }
 
@@ -737,7 +737,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_notifications'
     <header class="main-header">
         <div class="header-container">
             <a href="../../" class="logo">
-                <img src="../assets/images/ktu logo.png" alt="UniHomes Logo">
+                <img src="../assets/images/landlords-logo.png" alt="UniHomes Logo">
                 <span>Landlords&Tenant</span>
             </a>
             

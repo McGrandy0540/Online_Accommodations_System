@@ -960,7 +960,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     <header class="main-header">
         <div class="header-container">
             <a href="../" class="logo">
-                <img src="../assets/images/logo-removebg-preview.png" alt="landlords&tenants Logo">
+                <img src="../assets/images/landlords-logo.png" alt="landlords&tenants Logo">
                 <span>Landlords&Tenants</span>
             </a>
             
@@ -1019,6 +1019,10 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                     <li><a href="settings.php"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
                     <li><a href="announcement.php" class="active"><i class="fa-solid fa-bullhorn"></i> <span class="menu-text"> Announcements</span></a></li>
                     <li><a href="notification/"><i class="fa-solid fa-bell"></i> <span class="menu-text"> Notification</span> </a></li>
+                    <li><a href="reports/"><i class="fa-solid fa-flag"></i> <span class="menu-text"> Reports</span> </a></li>
+                    <li><a href="uploadfile.php"><i class="fa-solid fa-file"></i> <span class="menu-text"> Document Uploads</span> </a></li>
+                    <li><a href="tenancy_agreement_uploads.php"><i class="fa-solid fa-file-upload"></i> <span class="menu-text"> Tenancy Agreement Upload</span> </a></li>
+                    <li><a href="Tenants_verified_document.php"><i class="fa-solid fa-file"></i> <span class="menu-text"> Tenancy Verification Doc</span> </a></li>
                 </ul>
             </div>
         </div>

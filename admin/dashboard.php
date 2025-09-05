@@ -128,7 +128,7 @@ try {
         }
         
         .logo img {
-            height: 40px;
+            height: 80px;
             margin-right: 10px;
         }
         
@@ -251,7 +251,7 @@ try {
     <header class="main-header">
         <div class="header-content">
             <a href="../" class="logo">
-                <img src="../assets/images/logo-removebg-preview.png" alt="UniHomes Logo">
+                <img src="../assets/images/landlords-logo.png" alt="landlords Logo">
                 <span>Landlords&Tenant</span>
             </a>
             

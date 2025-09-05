@@ -8,7 +8,7 @@
 define('SMTP_HOST', 'smtp.gmail.com');
 define('SMTP_PORT', 465); // Use 465 for SSL
 define('SMTP_USERNAME', 'godwinaboade5432109876@gmail.com');
-define('SMTP_PASSWORD', 'ltxf nkog ymid wuah'); // App password
+define('SMTP_PASSWORD', 'nblu ewzo rpqe jfdu'); // App password
 define('SMTP_ENCRYPTION', 'ssl'); // SSL encryption
 define('SMTP_DEBUG', 0); // Set to 2 for detailed debugging, 0 for production
 

@@ -619,7 +619,7 @@ $announcements = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </button>
                     
                     <a href="../../" class="logo">
-                        <img src="../assets/images/logo-removebg-preview.png" alt="Logo">
+                        <img src="../assets/images/landlords-logo.png" alt="Logo">
                         <span>Landlords&Tenants</span>
                     </a>
                     

@@ -26,6 +26,8 @@ $filters = [
     'amenities' => isset($_GET['amenities']) ? (array)$_GET['amenities'] : []
 ];
 
+
+
 // Query to get approved properties
 $query = "SELECT 
             p.*, 

@@ -17,7 +17,7 @@ $owner_id = $_SESSION['user_id'];
 $pdo = Database::getInstance();
 
 // Include email service
-require_once __DIR__ . '../../includes/EmailService.php';
+require_once __DIR__ . '../../includes/property_owner_emailService.php';
 require_once __DIR__ . '../../config/email.php';
 
 // Get profile picture path
@@ -118,24 +118,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute($params);
         $recipients = $stmt->fetchAll();
         
-        // Send emails using EmailService
+        // Send emails using EmailService with enhanced features
         $emailService = new EmailService();
         $email_subject = $is_urgent ? "[URGENT] $title" : $title;
+        $sender_name = $_SESSION['username'] ?? 'Property Owner';
         $sent_count = 0;
         
         foreach ($recipients as $recipient) {
             try {
-                $emailService->sendAnnouncement(
+                $result = $emailService->sendAnnouncement(
                     $recipient['email'],
                     $email_subject,
-                    $message
+                    $message,
+                    $sender_name,
+                    $is_urgent,
+                    $target_group
                 );
                 
-                $sent_count++;
-                
-                // Record recipient
-                $stmt = $pdo->prepare("INSERT INTO announcement_recipients (announcement_id, user_id) VALUES (?, ?)");
-                $stmt->execute([$announcement_id, $recipient['id']]);
+                if ($result['success']) {
+                    $sent_count++;
+                    
+                    // Record recipient
+                    $stmt = $pdo->prepare("INSERT INTO announcement_recipients (announcement_id, user_id) VALUES (?, ?)");
+                    $stmt->execute([$announcement_id, $recipient['id']]);
+                } else {
+                    error_log("Email sending failed to {$recipient['email']}: " . $result['message']);
+                }
             } catch (Exception $e) {
                 error_log("Email sending failed to {$recipient['email']}: " . $e->getMessage());
             }
