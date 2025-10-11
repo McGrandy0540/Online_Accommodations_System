@@ -570,6 +570,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
+        <!-- Virtual Tours Section -->
+        <?php include 'property_video_viewer.php'; ?>
+
         <div class="booking-container">
             <!-- Property Details -->
             <div class="property-card">
@@ -741,6 +744,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <option value="6">6 Months</option>
                             <option value="9">9 Months</option>
                             <option value="12">12 Months</option>
+                            <option value="24">24 Months</option>
                             
                         </select>
                         <div class="form-text">Select how long you plan to stay</div>
@@ -773,10 +777,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-calendar-check me-2"></i> Confirm Booking
                     </button>
+
+
                 </form>
             </div>
         </div>
     </main>
+
+
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>

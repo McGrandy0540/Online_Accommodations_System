@@ -692,7 +692,7 @@ $unread_notifications = $notifications_stmt->fetchAll();
                                 
                                 <div class="payment-info">
                                     <h5><i class="fas fa-info-circle me-2"></i>Payment Information</h5>
-                                    <p>Adding a new room requires a one-time levy payment of <span class="price">GHS 50.00</span>.</p>
+                                    <p>Adding a new room requires a one-time levy payment of <span class="price">GHS 20.00</span>.</p>
                                     <p>This payment covers the room listing for <strong>1 year</strong> and will be processed after you submit this form.</p>
                                     <div class="alert alert-warning mt-3">
                                         <i class="fas fa-exclamation-triangle me-2"></i>

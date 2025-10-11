@@ -783,6 +783,10 @@ function getProfilePicturePath($path) {
                     <div class="text-center mt-4">
                         <a href="../search/" class="btn btn-primary">
                             <i class="fas fa-search me-2"></i> Find Accommodation
+                            
+                        </a>
+                        <a href="../dashboard.php" class="btn btn-primary">
+                            <i class ="fas fa-arrow-left me-2"></i>Back to Dashboard
                         </a>
                     </div>
                 <?php endif; ?>

@@ -519,10 +519,6 @@ $failed_payments = array_filter($payments, fn($p) => $p['status'] === 'failed');
                 <i class="fas fa-money-bill-wave"></i>
                 <span>Payments</span>
             </a>
-            <a href="../chat/index.php">
-                <i class="fas fa-comments"></i>
-                <span>Live Chat</span>
-            </a>
             <a href="../maintenance/index.php">
                 <i class="fas fa-tools"></i>
                 <span>Maintenance</span>

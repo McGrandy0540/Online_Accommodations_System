@@ -612,6 +612,9 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <button id="openAddModal" class="btn btn-primary">
                 <i class="fas fa-plus"></i> Add New User
             </button>
+            <a href="index.php" class="btn btn-primary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
         </div>
 
         <div class="card">

@@ -17,7 +17,7 @@ $locations = $pdo->query("SELECT DISTINCT location FROM property WHERE approved 
 
 // Default filters
 $filters = [
-    'min_price' => $_GET['min_price'] ?? 0,
+    'min_price' => $_GET['min_price'] ?? 1500,
     'max_price' => $_GET['max_price'] ?? 2500,
     'category' => $_GET['category'] ?? '',
     'location' => $_GET['location'] ?? '',
@@ -876,7 +876,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                             <div class="form-group">
                                 <label for="minPrice" class="form-label">Min</label>
                                 <input type="number" class="form-control" id="minPrice" 
-                                       name="min_price" value="<?= $filters['min_price'] ?>" min="0">
+                                       name="min_price" value="<?= $filters['min_price'] ?>" min="1500">
                             </div>
                             <div class="form-group">
                                 <label for="maxPrice" class="form-label">Max</label>
@@ -934,15 +934,15 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                     <div id="bedroomFilter" class="filter-content collapse show">
                         <select class="form-select" name="bedrooms">
                             <option value="">Any</option>
-                            <option value="1" <?= $filters['bedrooms'] == 1 ? 'selected' : '' ?>>1+</option>
-                            <option value="2" <?= $filters['bedrooms'] == 2 ? 'selected' : '' ?>>2+</option>
-                            <option value="3" <?= $filters['bedrooms'] == 3 ? 'selected' : '' ?>>3+</option>
-                            <option value="4" <?= $filters['bedrooms'] == 4 ? 'selected' : '' ?>>4+</option>
+                            <option value="1" <?= $filters['bedrooms'] == 1 ? 'selected' : '' ?>>1</option>
+                            <option value="2" <?= $filters['bedrooms'] == 2 ? 'selected' : '' ?>>2</option>
+                            <option value="3" <?= $filters['bedrooms'] == 3 ? 'selected' : '' ?>>3</option>
+                            <option value="4" <?= $filters['bedrooms'] == 4 ? 'selected' : '' ?>>4</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- Gender -->
+                <!-- Gender
                 <div class="filter-section">
                     <div class="filter-title" data-bs-toggle="collapse" data-bs-target="#genderFilter">
                         <span>Gender Preference</span>
@@ -965,7 +965,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                             <label class="form-check-label" for="genderFemale">Female Only</label>
                         </div>
                     </div>
-                </div>
+                </div> -->
 
                 <!-- Amenities -->
                 <div class="filter-section">

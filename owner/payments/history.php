@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '../../../config/database.php';
-require_once __DIR__ . 'audit_log.php';
+
 
 $pdo = Database::getInstance();
 $owner_id = $_SESSION['user_id'];
@@ -27,14 +27,6 @@ if (!$payment) {
     exit();
 }
 
-// Get payment history logs
-$stmt = $pdo->prepare("
-    SELECT * FROM payment_logs 
-    WHERE payment_id = ?
-    ORDER BY created_at DESC
-");
-$stmt->execute([$payment_id]);
-$logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get related activities
 $stmt = $pdo->prepare("
@@ -567,21 +559,6 @@ $activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         </div>
                         <div class="card-body">
                             <div class="timeline">
-                                <?php foreach ($logs as $log): ?>
-                                <div class="timeline-item">
-                                    <div class="timeline-date">
-                                        <?= date('M j, Y H:i', strtotime($log['created_at'])) ?>
-                                    </div>
-                                    <div class="timeline-content">
-                                        <h6><?= htmlspecialchars($log['action']) ?></h6>
-                                        <p class="mb-1"><?= htmlspecialchars($log['description']) ?></p>
-                                        <?php if ($log['details']): ?>
-                                        <p class="text-muted small mb-0">Details: <?= htmlspecialchars($log['details']) ?></p>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                                <?php endforeach; ?>
-                                
                                 <?php foreach ($activities as $activity): ?>
                                 <div class="timeline-item">
                                     <div class="timeline-date">

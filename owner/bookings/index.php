@@ -658,10 +658,6 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <i class="fas fa-money-bill-wave"></i>
                 <span>Payments</span>
             </a>
-            <a href="../chat/index.php">
-                <i class="fas fa-comments"></i>
-                <span>Live Chat</span>
-            </a>
             <a href="../maintenance/index.php">
                 <i class="fas fa-tools"></i>
                 <span>Maintenance</span>
@@ -877,12 +873,6 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <i class="fas fa-times me-1"></i> Reject
                                         </a>
                                     <?php endif; ?>
-                                    <a href="../chat/?booking=<?= $booking['id'] ?>" class="btn btn-info">
-                                        <i class="fas fa-comments me-1"></i> Chat
-                                    </a>
-                                    <a href="../virtual-tours/api/schedule.php?property=<?= $booking['property_id'] ?>" class="btn btn-secondary">
-                                        <i class="fas fa-vr-cardboard me-1"></i> Virtual Tour
-                                    </a>
                                    
                                 </div>
                             </div>

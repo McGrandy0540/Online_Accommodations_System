@@ -682,7 +682,7 @@ $unread_notifications = $notifications_stmt->fetchAll();
                     </div>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
-                        <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                        <li><a class="dropdown-item" href="../profile/index.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <form action="logout.php" method="POST">
@@ -709,7 +709,6 @@ $unread_notifications = $notifications_stmt->fetchAll();
                     <li><a href="index.php" class="active"><i class="fas fa-wallet me-2"></i> <span>Payments</span></a></li>
                     <li><a href="../reviews/index.php"><i class="fas fa-star me-2"></i> <span>Reviews</span></a></li>
                     <li><a href="../maintenance/index.php"><i class="fas fa-tools me-2"></i> <span>Maintenance</span></a></li>
-                    <li><a href="../announcements/index.php"><i class="fas fa-bullhorn me-2"></i> <span>Announcements</span></a></li>
                     <li><a href="../profile/index.php"><i class="fas fa-cog me-2"></i> <span>Settings</span></a></li>
                 </ul>
             </div>
@@ -737,7 +736,7 @@ $unread_notifications = $notifications_stmt->fetchAll();
                         <div class="col-md-4 text-md-end">
                             <div class="d-flex align-items-center justify-content-end">
                                 <div class="me-3 position-relative">
-                                    <a href="notifications.php" class="text-white position-relative">
+                                    <a href="../notification/index.php" class="text-white position-relative">
                                         <i class="fas fa-bell fa-lg"></i>
                                         <?php if(count($unread_notifications) > 0): ?>
                                         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
@@ -905,7 +904,7 @@ $unread_notifications = $notifications_stmt->fetchAll();
                                 <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
                             </div>
                             <div class="card-body p-2">
-                                <a href="../properties/index.php" class="quick-link">
+                                <a href="../search/index.php" class="quick-link">
                                     <i class="fas fa-search me-2"></i> Find Accommodation
                                 </a>
                                 <a href="../bookings/index.php" class="quick-link">
@@ -917,7 +916,7 @@ $unread_notifications = $notifications_stmt->fetchAll();
                                 <a href="../reviews/index.php" class="quick-link">
                                     <i class="fas fa-star me-2"></i> Leave Reviews
                                 </a>
-                                <a href="../settings/index.php" class="quick-link">
+                                <a href="../profile/index.php" class="quick-link">
                                     <i class="fas fa-cog me-2"></i> Account Settings
                                 </a>
                             </div>

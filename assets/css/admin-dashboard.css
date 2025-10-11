@@ -142,6 +142,7 @@ body {
 
 .user-profile span {
     font-weight: 500;
+    color: var(--light-color);
 }
 
 .admin-badge {

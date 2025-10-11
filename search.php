@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['search'])) {
     try {
         $pdo = Database::getInstance();
         
-        // Base query
+        // CORRECTED Base query - fixed for ONLY_FULL_GROUP_BY
         $sql = "SELECT 
                 p.id, 
                 p.property_name, 
@@ -59,15 +59,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['search'])) {
                 p.bathrooms,
                 p.latitude,
                 p.longitude,
-                pi.image_url as thumbnail,
+                p.created_at,
+                (SELECT pi.image_url FROM property_images pi WHERE pi.property_id = p.id LIMIT 1) as thumbnail,
                 c.name as category,
                 AVG(r.rating) as average_rating,
                 COUNT(r.id) as review_count
             FROM property p
-            LEFT JOIN property_images pi ON p.id = pi.property_id AND pi.is_virtual_tour = 0
             LEFT JOIN categories c ON p.category_id = c.id
             LEFT JOIN reviews r ON p.id = r.property_id
-            WHERE p.status = 'available' AND p.approved = 1";
+            WHERE p.status = 'available' AND p.deleted = 0";
         
         // Add search conditions
         $conditions = [];
@@ -98,19 +98,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['search'])) {
             $params[':property_type'] = $search_filters['property_type'];
         }
         
+        // Add amenities filter if selected
+        if (!empty($search_filters['amenities'])) {
+            $amenity_ids = implode(',', array_map('intval', $search_filters['amenities']));
+            $conditions[] = "p.id IN (
+                SELECT DISTINCT pf.property_id 
+                FROM property_features pf 
+                WHERE pf.id IN ($amenity_ids)
+            )";
+        }
+        
         // Add conditions to query
         if (!empty($conditions)) {
             $sql .= " AND " . implode(" AND ", $conditions);
         }
         
-        // Group by property
-        $sql .= " GROUP BY p.id";
+        // Group by property with all non-aggregated columns
+        $sql .= " GROUP BY p.id, p.property_name, p.description, p.price, p.location, p.bedrooms, p.bathrooms, p.latitude, p.longitude, p.created_at, c.name";
         
-        // Count total results for pagination
-        $count_sql = "SELECT COUNT(*) as total FROM ($sql) as total_results";
+        // Count total results for pagination (using a simpler approach)
+        $count_sql = "SELECT COUNT(DISTINCT p.id) as total 
+                     FROM property p
+                     LEFT JOIN categories c ON p.category_id = c.id
+                     LEFT JOIN reviews r ON p.id = r.property_id
+                     WHERE p.status = 'available' AND p.deleted = 0";
+        
+        if (!empty($conditions)) {
+            $count_sql .= " AND " . implode(" AND ", $conditions);
+        }
+        
         $stmt = $pdo->prepare($count_sql);
-        $stmt->execute($params);
-        $pagination['total'] = $stmt->fetch()['total'];
+        
+        // Bind parameters for count query
+        foreach ($params as $key => $value) {
+            $param_type = is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR;
+            $stmt->bindValue($key, $value, $param_type);
+        }
+        
+        $stmt->execute();
+        $count_result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $pagination['total'] = $count_result['total'] ?? 0;
         
         // Add sorting and pagination
         $sort = isset($_GET['sort']) ? $_GET['sort'] : 'price_asc';
@@ -146,7 +173,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['search'])) {
         
     } catch (PDOException $e) {
         error_log("Database error in search: " . $e->getMessage());
-        $search_error = "An error occurred while searching. Please try again later.";
+        error_log("SQL: " . $sql);
+        error_log("Params: " . print_r($params, true));
+        $search_error = "An error occurred while searching. Please try again later. Error: " . $e->getMessage();
     }
 }
 
@@ -163,13 +192,14 @@ try {
 // Get all amenities for filter checkboxes
 try {
     $pdo = Database::getInstance();
-    $stmt = $pdo->query("SELECT id, feature_name as name FROM property_features GROUP BY feature_name");
+    $stmt = $pdo->query("SELECT id, feature_name as name FROM property_features GROUP BY feature_name ORDER BY feature_name");
     $amenities = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log("Failed to fetch amenities: " . $e->getMessage());
     $amenities = [];
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -192,6 +222,26 @@ try {
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f5f5f5;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        
+        .nav-link {
+            color: white !important;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        
+        .nav-link:hover {
+            color: rgba(255,255,255,0.8) !important;
         }
         
         .search-container {
@@ -232,7 +282,7 @@ try {
             color: #ffc107;
         }
         
-        #map {
+        #map, #sideMap {
             height: 500px;
             border-radius: 8px;
             margin-bottom: 20px;
@@ -260,16 +310,99 @@ try {
             color: var(--primary-color);
         }
         
+        .footer {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 40px 0;
+            margin-top: 50px;
+        }
+        
         @media (max-width: 768px) {
-            #map {
+            #map, #sideMap {
                 height: 300px;
+            }
+            
+            .navbar-collapse {
+                background-color: var(--secondary-color);
+                padding: 15px;
+                border-radius: 8px;
+                margin-top: 10px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Header (Same as index.php) -->
-    <?php include __DIR__ . '/../includes/header.php'; ?>
+    <!-- Header -->
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="index.php">
+                <i class="fas fa-home me-2"></i>Landlords&Tenants
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.php">
+                            <i class="fas fa-home me-1"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="search.php">
+                            <i class="fas fa-search me-1"></i> Search
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.php">
+                            <i class="fas fa-info-circle me-1"></i> About
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.php">
+                            <i class="fas fa-envelope me-1"></i> Contact
+                        </a>
+                    </li>
+                </ul>
+                
+                <ul class="navbar-nav">
+                    <?php if (isset($_SESSION['user_id'])): ?>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-user me-1"></i> 
+                                <?= htmlspecialchars($_SESSION['username'] ?? 'User') ?>
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="dashboard.php">
+                                    <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                                </a></li>
+                                <li><a class="dropdown-item" href="profile.php">
+                                    <i class="fas fa-user-edit me-2"></i> Profile
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="logout.php">
+                                    <i class="fas fa-sign-out-alt me-2"></i> Logout
+                                </a></li>
+                            </ul>
+                        </li>
+                    <?php else: ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="auth/login.php">
+                                <i class="fas fa-sign-in-alt me-1"></i> Login
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="auth/register.php">
+                                <i class="fas fa-user-plus me-1"></i> Register
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                </ul>
+            </div>
+        </div>
+    </nav>
     
     <!-- Main Content -->
     <div class="container py-5 mt-4">
@@ -326,11 +459,11 @@ try {
                                         <label class="form-label">Amenities</label>
                                         <div class="amenities-checkbox">
                                             <div class="row">
-                                                <?php foreach ($amenities as $amenity): ?>
+                                                <?php foreach ($amenities as $index => $amenity): ?>
                                                     <div class="col-md-3">
                                                         <div class="form-check">
-                                                            <input class="form-check-input" type="checkbox" name="amenities[]" value="<?= $amenity['id'] ?>" 
-                                                                <?= in_array($amenity['id'], $search_filters['amenities']) ? 'checked' : '' ?>>
+                                                            <input class="form-check-input" type="checkbox" name="amenities[]" value="<?= $index + 1 ?>" 
+                                                                <?= in_array($index + 1, $search_filters['amenities']) ? 'checked' : '' ?>>
                                                             <label class="form-check-label">
                                                                 <?= htmlspecialchars($amenity['name']) ?>
                                                             </label>
@@ -362,6 +495,9 @@ try {
                                     <input type="hidden" name="min_price" value="<?= htmlspecialchars($search_filters['min_price']) ?>">
                                     <input type="hidden" name="max_price" value="<?= htmlspecialchars($search_filters['max_price']) ?>">
                                     <input type="hidden" name="property_type" value="<?= htmlspecialchars($search_filters['property_type']) ?>">
+                                    <?php foreach ($search_filters['amenities'] as $amenity_id): ?>
+                                        <input type="hidden" name="amenities[]" value="<?= $amenity_id ?>">
+                                    <?php endforeach; ?>
                                     
                                     <select class="form-select" name="sort" onchange="document.getElementById('sortForm').submit()">
                                         <option value="price_asc" <?= ($_GET['sort'] ?? 'price_asc') === 'price_asc' ? 'selected' : '' ?>>Price: Low to High</option>
@@ -378,17 +514,17 @@ try {
                                     <span>GHS <?= $search_filters['min_price'] ?: '0' ?></span>
                                     <span>GHS <?= $search_filters['max_price'] ?: 'Any' ?></span>
                                 </div>
-                                <input type="range" class="form-range" min="0" max="5000" step="50" disabled>
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label">Property Type</label>
                                 <div class="list-group">
-                                    <a href="search.php?search=<?= urlencode($search_query) ?>" class="list-group-item list-group-item-action <?= empty($search_filters['property_type']) ? 'active' : '' ?>">
+                                    <a href="search.php?search=<?= urlencode($search_query) ?>&location=<?= urlencode($search_filters['location']) ?>&min_price=<?= $search_filters['min_price'] ?>&max_price=<?= $search_filters['max_price'] ?>" 
+                                       class="list-group-item list-group-item-action <?= empty($search_filters['property_type']) ? 'active' : '' ?>">
                                         All Types
                                     </a>
                                     <?php foreach ($property_types as $type): ?>
-                                        <a href="search.php?search=<?= urlencode($search_query) ?>&property_type=<?= urlencode($type['name']) ?>" 
+                                        <a href="search.php?search=<?= urlencode($search_query) ?>&property_type=<?= urlencode($type['name']) ?>&location=<?= urlencode($search_filters['location']) ?>&min_price=<?= $search_filters['min_price'] ?>&max_price=<?= $search_filters['max_price'] ?>" 
                                            class="list-group-item list-group-item-action <?= $search_filters['property_type'] === $type['name'] ? 'active' : '' ?>">
                                             <?= htmlspecialchars($type['name']) ?>
                                         </a>
@@ -422,7 +558,7 @@ try {
                                     <div class="property-card mb-4">
                                         <div class="row g-0">
                                             <div class="col-md-4">
-                                                <img src="<?= htmlspecialchars($property['thumbnail'] ?: 'assets/images/property-placeholder.jpg') ?>" class="property-img" alt="<?= htmlspecialchars($property['property_name']) ?>">
+                                                <img src="../../uploads/<?= htmlspecialchars($property['thumbnail'] ?: 'default-property.jpg') ?>" class="property-img" alt="<?= htmlspecialchars($property['property_name']) ?>">
                                             </div>
                                             <div class="col-md-8">
                                                 <div class="p-3">
@@ -464,7 +600,7 @@ try {
                                                         <div class="text-muted mb-2">No reviews yet</div>
                                                     <?php endif; ?>
                                                     
-                                                    <a href="property.php?id=<?= $property['id'] ?>" class="btn btn-sm btn-primary">
+                                                    <a href="../property.php?id=<?= $property['id'] ?>" class="btn btn-sm btn-primary">
                                                         View Details
                                                     </a>
                                                 </div>
@@ -480,7 +616,7 @@ try {
                                             <?php if ($pagination['page'] > 1): ?>
                                                 <li class="page-item">
                                                     <a class="page-link" 
-                                                       href="?search=<?= urlencode($search_query) ?>&page=<?= $pagination['page'] - 1 ?>" 
+                                                       href="?search=<?= urlencode($search_query) ?>&location=<?= urlencode($search_filters['location']) ?>&min_price=<?= $search_filters['min_price'] ?>&max_price=<?= $search_filters['max_price'] ?>&property_type=<?= urlencode($search_filters['property_type']) ?>&page=<?= $pagination['page'] - 1 ?>" 
                                                        aria-label="Previous">
                                                         <span aria-hidden="true">&laquo;</span>
                                                     </a>
@@ -493,7 +629,7 @@ try {
                                             $end_page = min($total_pages, $pagination['page'] + 2);
                                             
                                             if ($start_page > 1): ?>
-                                                <li class="page-item"><a class="page-link" href="?search=<?= urlencode($search_query) ?>&page=1">1</a></li>
+                                                <li class="page-item"><a class="page-link" href="?search=<?= urlencode($search_query) ?>&location=<?= urlencode($search_filters['location']) ?>&min_price=<?= $search_filters['min_price'] ?>&max_price=<?= $search_filters['max_price'] ?>&property_type=<?= urlencode($search_filters['property_type']) ?>&page=1">1</a></li>
                                                 <?php if ($start_page > 2): ?>
                                                     <li class="page-item disabled"><span class="page-link">...</span></li>
                                                 <?php endif; ?>
@@ -501,7 +637,7 @@ try {
                                             
                                             <?php for ($i = $start_page; $i <= $end_page; $i++): ?>
                                                 <li class="page-item <?= $i == $pagination['page'] ? 'active' : '' ?>">
-                                                    <a class="page-link" href="?search=<?= urlencode($search_query) ?>&page=<?= $i ?>"><?= $i ?></a>
+                                                    <a class="page-link" href="?search=<?= urlencode($search_query) ?>&location=<?= urlencode($search_filters['location']) ?>&min_price=<?= $search_filters['min_price'] ?>&max_price=<?= $search_filters['max_price'] ?>&property_type=<?= urlencode($search_filters['property_type']) ?>&page=<?= $i ?>"><?= $i ?></a>
                                                 </li>
                                             <?php endfor; ?>
                                             
@@ -509,13 +645,13 @@ try {
                                                 <?php if ($end_page < $total_pages - 1): ?>
                                                     <li class="page-item disabled"><span class="page-link">...</span></li>
                                                 <?php endif; ?>
-                                                <li class="page-item"><a class="page-link" href="?search=<?= urlencode($search_query) ?>&page=<?= $total_pages ?>"><?= $total_pages ?></a></li>
+                                                <li class="page-item"><a class="page-link" href="?search=<?= urlencode($search_query) ?>&location=<?= urlencode($search_filters['location']) ?>&min_price=<?= $search_filters['min_price'] ?>&max_price=<?= $search_filters['max_price'] ?>&property_type=<?= urlencode($search_filters['property_type']) ?>&page=<?= $total_pages ?>"><?= $total_pages ?></a></li>
                                             <?php endif; ?>
                                             
                                             <?php if ($pagination['page'] < $total_pages): ?>
                                                 <li class="page-item">
                                                     <a class="page-link" 
-                                                       href="?search=<?= urlencode($search_query) ?>&page=<?= $pagination['page'] + 1 ?>" 
+                                                       href="?search=<?= urlencode($search_query) ?>&location=<?= urlencode($search_filters['location']) ?>&min_price=<?= $search_filters['min_price'] ?>&max_price=<?= $search_filters['max_price'] ?>&property_type=<?= urlencode($search_filters['property_type']) ?>&page=<?= $pagination['page'] + 1 ?>" 
                                                        aria-label="Next">
                                                         <span aria-hidden="true">&raquo;</span>
                                                     </a>
@@ -550,8 +686,55 @@ try {
         </div>
     </div>
     
-    <!-- Footer (Same as index.php) -->
-    <?php include __DIR__ . '/../includes/footer.php'; ?>
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-4">
+                    <h5>Landlords&Tenants</h5>
+                    <p>Your trusted platform for finding and managing student accommodations.</p>
+                    <div class="social-links">
+                        <a href="#" class="text-white me-3"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" class="text-white me-3"><i class="fab fa-twitter"></i></a>
+                        <a href="#" class="text-white me-3"><i class="fab fa-instagram"></i></a>
+                        <a href="#" class="text-white"><i class="fab fa-linkedin-in"></i></a>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <h6>Quick Links</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="../index.php" class="text-white text-decoration-none">Home</a></li>
+                        <li><a href="search.php" class="text-white text-decoration-none">Search</a></li>
+                        <li><a href="../about.php" class="text-white text-decoration-none">About</a></li>
+                        <li><a href="../contact.php" class="text-white text-decoration-none">Contact</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h6>Support</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="../help.php" class="text-white text-decoration-none">Help Center</a></li>
+                        <li><a href="../faq.php" class="text-white text-decoration-none">FAQ</a></li>
+                        <li><a href="../privacy.php" class="text-white text-decoration-none">Privacy Policy</a></li>
+                        <li><a href="../terms.php" class="text-white text-decoration-none">Terms of Service</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h6>Contact Info</h6>
+                    <ul class="list-unstyled">
+                        <li><i class="fas fa-envelope me-2"></i> support@landlordsandtenants.com</li>
+                        <li><i class="fas fa-phone me-2"></i> +233 123 456 789</li>
+                        <li><i class="fas fa-map-marker-alt me-2"></i> Accra, Ghana</li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="my-4">
+            <div class="row">
+                <div class="col-md-12 text-center">
+                    <p>&copy; <?= date('Y') ?> Landlords&Tenants. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
     
     <!-- JavaScript Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -559,7 +742,7 @@ try {
     
     <script>
         // Initialize side map
-        const sideMap = L.map('sideMap').setView([6.5244, 3.3792], 13); // Default to Lagos coordinates
+        const sideMap = L.map('sideMap').setView([5.6037, -0.1870], 13); // Default to Accra coordinates
         
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -606,7 +789,7 @@ try {
             
             // Initialize main map if not already done
             if (!window.mainMap) {
-                window.mainMap = L.map('map').setView([6.5244, 3.3792], 13);
+                window.mainMap = L.map('map').setView([5.6037, -0.1870], 13);
                 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -624,11 +807,6 @@ try {
                     window.mainMap.fitBounds(bounds);
                 <?php endif; ?>
             }
-        });
-        
-        // Mobile menu toggle (same as index.php)
-        document.getElementById('mobileMenuBtn').addEventListener('click', function() {
-            document.getElementById('mainMenu').classList.toggle('show');
         });
     </script>
 </body>

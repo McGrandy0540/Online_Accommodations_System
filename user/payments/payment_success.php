@@ -26,10 +26,11 @@ try {
     $student_id = $_SESSION['user_id'];
     $pdo = Database::getInstance();
 
-    // Fixed: Added pr.price to the SELECT statement
+    // UPDATED QUERY: Added COALESCE to handle payment_date
     $stmt = $pdo->prepare("
         SELECT p.*, b.*, pr.property_name, pr.location, pr.price,
-               u.username AS owner_name, u.email AS owner_email, u.phone_number AS owner_phone
+               u.username AS owner_name, u.email AS owner_email, u.phone_number AS owner_phone,
+               COALESCE(p.payment_date, p.created_at) as display_payment_date
         FROM payments p
         JOIN bookings b ON p.booking_id = b.id
         JOIN property pr ON b.property_id = pr.id
@@ -476,7 +477,7 @@ ob_end_flush();
                             <div class="info-item">
                                 <p class="text-sm text-gray-500">Payment Date</p>
                                 <p class="font-medium">
-                                    <?= date('F j, Y \a\t g:i A', strtotime($booking['created_at'])) ?>
+                                    <?= date('F j, Y \a\t g:i A', strtotime($booking['display_payment_date'])) ?>
                                 </p>
                             </div>
                         </div>
@@ -520,6 +521,10 @@ ob_end_flush();
                     <a href="../bookings/index.php" 
                        class="btn-primary">
                         <i class="fas fa-calendar-check mr-2"></i> View My Bookings
+                    </a>
+                    <a href="../dashboard.php"
+                     class="btn-success">
+                        <i class="fas fa-tachometer-alt mr-2"></i> Go to Dashboard
                     </a>
                 </div>
             </div>

@@ -44,6 +44,14 @@ define('PAYSTACK_PUBLIC_KEY', 'pk_test_db73c7228ff880b4a3d49593023b91a6a5b923c6'
 define('PAYSTACK_CURRENCY', 'GHS');
 define('PAYSTACK_MIN_AMOUNT', 100); // Minimum amount in smallest currency unit
 
+//======================
+//Paystack Secret Key Configuration
+//======================
+define('PAYSTACK_SECRET_KEYS', 'sk_test_9c3c7da0284defbf21404dd3faa9cc15ed571d8e');
+define('PAYSTACK_PUBLIC_KEYS', 'pk_live_202e05ba754576d767ca230d852e0f29be0f9d74');
+define('PAYSTACK_CURRENCYS', 'GHS'); // Ghanaian Cedi
+define('PAYSTACK_MIN_AMOUNTS', 100); // Minimum amount in smallest currency unit 
+
 // =====================
 // Email Configuration
 // =====================

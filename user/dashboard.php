@@ -1326,6 +1326,34 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+
+        // Prevent back button navigation after login
+        (function() {
+            if (window.history && window.history.pushState) {
+                window.history.pushState('forward', null, '');
+                
+                window.addEventListener('popstate', function() {
+                    window.history.pushState('forward', null, '');
+                });
+            }
+        })();
+
+        // Prevent browser caching
+        window.onload = function() {
+            if (performance.navigation.type == 2) {
+                window.location.reload();
+            }
+        };
+
+        // Disable cache
+        window.onpageshow = function(event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        };
+
+
+
         // Toggle sidebar collapse
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('collapsed');

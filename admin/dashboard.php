@@ -290,12 +290,14 @@ try {
                 <ul>
                     <li><a href="dashboard.php" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
                     <li><a href="properties/"><i class="fas fa-home"></i> Manage Accommodations</a></li>
-                    <li><a href="users/"><i class="fas fa-users"></i> Manage Students</a></li>
+                    <li><a href="users/"><i class="fas fa-users"></i> Manage Tenants</a></li>
                     <li><a href="payments/"><i class="fas fa-wallet"></i> Payment Management</a></li>
                     <li><a href="reports/"><i class="fas fa-file-invoice-dollar"></i> Financial Reports</a></li>
                     <li><a href="approvals/"><i class="fas fa-calendar-alt"></i> Booking Approvals</a></li>
                     <li><a href="announcement.php"><i class="fa-solid fa-bullhorn"></i></i> Announcement </a></li>
                     <li><a href="sms/"><i class="fas fa-sms"></i> Notifications</a></li>
+                    <li><a href="verified_property_owner_document.php"><i class="fas fa-check-circle"></i> Verified Property Owners</a></li>
+                    <li><a href="verified_tenant_document.php"><i class="fa fa-check-circle"></i> Verified Tenant</a></li>
                 </ul>
 <li>
    <form action="logout.php" method="POST">
@@ -552,6 +554,31 @@ try {
     </footer>
 
     <script>
+        // Prevent back button navigation after login
+        (function() {
+            if (window.history && window.history.pushState) {
+                window.history.pushState('forward', null, '');
+                
+                window.addEventListener('popstate', function() {
+                    window.history.pushState('forward', null, '');
+                });
+            }
+        })();
+
+        // Prevent browser caching
+        window.onload = function() {
+            if (performance.navigation.type == 2) {
+                window.location.reload();
+            }
+        };
+
+        // Disable cache
+        window.onpageshow = function(event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        };
+
         // Toggle sidebar on mobile
         document.getElementById('menuToggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('active');

@@ -1013,15 +1013,14 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                     <li><a href="bookings/"><i class="fas fa-calendar-alt"></i> <span class="menu-text">Bookings</span></a></li>
                     <li><a href="payments/"><i class="fas fa-wallet"></i> <span class="menu-text">Payments</span></a></li>
                     <li><a href="reviews/"><i class="fas fa-star"></i> <span class="menu-text">Reviews</span></a></li>
-                    <li><a href="chat/"><i class="fas fa-comments"></i> <span class="menu-text">Messages</span></a></li>
                     <li><a href="maintenance/"><i class="fas fa-tools"></i> <span class="menu-text">Maintenance</span></a></li>
-                    <li><a href="virtual-tours/"><i class="fas fa-video"></i> <span class="menu-text">Virtual Tours</span></a></li>
+                    <li><a href="virtual-tours/index.php"><i class="fas fa-video"></i> <span class="menu-text">Virtual Tours</span></a></li>
                     <li><a href="settings.php"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
                     <li><a href="announcement.php" class="active"><i class="fa-solid fa-bullhorn"></i> <span class="menu-text"> Announcements</span></a></li>
                     <li><a href="notification/"><i class="fa-solid fa-bell"></i> <span class="menu-text"> Notification</span> </a></li>
                     <li><a href="reports/"><i class="fa-solid fa-flag"></i> <span class="menu-text"> Reports</span> </a></li>
                     <li><a href="uploadfile.php"><i class="fa-solid fa-file"></i> <span class="menu-text"> Document Uploads</span> </a></li>
-                    <li><a href="tenancy_agreement_uploads.php"><i class="fa-solid fa-file-upload"></i> <span class="menu-text"> Tenancy Agreement Upload</span> </a></li>
+                    <li><a href="tenancy_agreements/index.php"><i class="fa-solid fa-file-upload"></i> <span class="menu-text"> Tenancy Agreement Upload</span> </a></li>
                     <li><a href="Tenants_verified_document.php"><i class="fa-solid fa-file"></i> <span class="menu-text"> Tenancy Verification Doc</span> </a></li>
                 </ul>
             </div>
@@ -1083,9 +1082,6 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                             <a href="bookings/" class="action-btn">
                                 <i class="fas fa-calendar"></i> Manage Bookings
                             </a>
-                            <a href="chat/" class="action-btn">
-                                <i class="fas fa-comments"></i> View Messages
-                            </a>
                         </div>
                     </div>
                 </div>
@@ -1145,7 +1141,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                     <div class="virtual-tour-promo">
                         <h2>Virtual Tours</h2>
                         <p>Enhance your listings with 360° virtual tours and attract more tenants</p>
-                        <a href="virtual-tours/upload.php" class="btn">
+                        <a href="virtual-tours/index.php" class="btn">
                             <i class="fas fa-video"></i> Upload Virtual Tour
                         </a>
                     </div>
@@ -1205,6 +1201,31 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Prevent back button navigation after login
+        (function() {
+            if (window.history && window.history.pushState) {
+                window.history.pushState('forward', null, '');
+                
+                window.addEventListener('popstate', function() {
+                    window.history.pushState('forward', null, '');
+                });
+            }
+        })();
+
+        // Prevent browser caching
+        window.onload = function() {
+            if (performance.navigation.type == 2) {
+                window.location.reload();
+            }
+        };
+
+        // Disable cache
+        window.onpageshow = function(event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        };
+
         // Toggle sidebar collapse
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('collapsed');

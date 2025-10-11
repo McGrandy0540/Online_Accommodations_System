@@ -376,6 +376,9 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <a href="add.php" class="btn btn-primary">
                 <i class="fas fa-plus"></i> Add New User
             </a>
+            <a href="../dashboard.php" class="btn btn-primary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
         </div>
 
         <div class="card">
@@ -388,7 +391,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <div class="status-filter">
                         <select name="status" class="form-control">
                             <option value="">All Statuses</option>
-                            <option value="student" <?php echo $statusFilter === 'student' ? 'selected' : ''; ?>>Student</option>
+                            <option value="student" <?php echo $statusFilter === 'student' ? 'selected' : ''; ?>>Tenant</option>
                             <option value="property_owner" <?php echo $statusFilter === 'property_owner' ? 'selected' : ''; ?>>Property Owner</option>
                             <option value="admin" <?php echo $statusFilter === 'admin' ? 'selected' : ''; ?>>Admin</option>
                         </select>

@@ -895,8 +895,8 @@ if (!in_array($current_tab, $allowed_tabs)) {
                                     <option value="">Select priority level...</option>
                                     <option value="low">Low - Minor issue, not urgent</option>
                                     <option value="medium">Medium - Needs attention soon</option>
-                                    <option value="high">High - Urgent issue</option>
-                                    <option value="emergency">Emergency - Immediate attention required</option>
+                                    <option value="high">High - Immediate attention required</option>
+                                    <!-- <option value="emergency">Emergency - Immediate attention required</option> -->
                                 </select>
                             </div>
                             

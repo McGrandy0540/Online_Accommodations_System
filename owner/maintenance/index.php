@@ -196,6 +196,91 @@ $unread_messages = $messages->fetchColumn();
             min-height: 100vh;
         }
 
+        /* NEW STYLES FOR MAINTENANCE IMAGES */
+        .message-image {
+            max-width: 300px;
+            max-height: 200px;
+            border-radius: 8px;
+            margin-top: 8px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            border: 2px solid #e9ecef;
+        }
+
+        .message-image:hover {
+            transform: scale(1.05);
+            border-color: var(--primary-color);
+        }
+
+        .image-modal .modal-dialog {
+            max-width: 90%;
+            max-height: 90vh;
+        }
+
+        .image-modal img {
+            width: 100%;
+            height: auto;
+            max-height: 80vh;
+            object-fit: contain;
+        }
+
+        .image-badge {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-left: 8px;
+        }
+
+        .message-content {
+            word-wrap: break-word;
+        }
+
+        .image-preview-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .image-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: 8px;
+        }
+
+        .image-preview-container:hover .image-overlay {
+            opacity: 1;
+        }
+
+        .image-overlay i {
+            font-size: 1.5rem;
+        }
+
+        /* Responsive adjustments for images */
+        @media (max-width: 768px) {
+            .message-image {
+                max-width: 250px;
+                max-height: 150px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .message-image {
+                max-width: 200px;
+                max-height: 120px;
+            }
+        }
+
         /* Header Styles */
         .main-header {
             background-color: var(--secondary-color);
@@ -778,20 +863,6 @@ $unread_messages = $messages->fetchColumn();
             color: var(--secondary-color);
         }
 
-        Modal Fixes
-        .modal-dialog {
-            max-width: 600px;
-        }
-
-        .modal-body {
-            padding: 1.25rem;
-        }
-
-        .form-control:focus {
-            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
-            border-color: #3498db;
-        }
-
         /* COMPLETE MODAL STABILITY FIX - NO ANIMATIONS */
         .modal {
             transition: none !important;
@@ -1137,7 +1208,7 @@ $unread_messages = $messages->fetchColumn();
                                                 </div>
                                                 <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                                                     <?php
-                                                    // Get messages for this request
+                                                    // Get messages for this request with image support
                                                     $msg_stmt = $pdo->prepare("
                                                         SELECT mm.*, u.username, u.profile_picture 
                                                         FROM maintenance_messages mm
@@ -1158,10 +1229,31 @@ $unread_messages = $messages->fetchColumn();
                                                                             <strong><?= htmlspecialchars($message['username']) ?></strong>
                                                                             <?= $message['sender_type'] === 'owner' ? '(You)' : '(Student)' ?>
                                                                             - <?= date('M j, Y g:i A', strtotime($message['created_at'])) ?>
+                                                                            <?php if ($message['has_image']): ?>
+                                                                                <span class="image-badge">
+                                                                                    <i class="fas fa-image"></i> Image
+                                                                                </span>
+                                                                            <?php endif; ?>
                                                                         </small>
                                                                     </div>
                                                                     <div class="message-content">
                                                                         <?= nl2br(htmlspecialchars($message['message'])) ?>
+                                                                        
+                                                                        <!-- Display Image if exists -->
+                                                                        <?php if ($message['has_image'] && !empty($message['image_path'])): ?>
+                                                                            <div class="mt-2">
+                                                                                <div class="image-preview-container">
+                                                                                    <img src="../../../<?= htmlspecialchars($message['image_path']) ?>" 
+                                                                                         alt="Maintenance Image" 
+                                                                                         class="message-image"
+                                                                                         data-bs-toggle="modal" 
+                                                                                         data-bs-target="#imageModal<?= $message['id'] ?>">
+                                                                                    <div class="image-overlay">
+                                                                                        <i class="fas fa-search-plus"></i>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        <?php endif; ?>
                                                                     </div>
                                                                     <?php if ($message['sender_type'] === 'student' && !$message['is_read']): ?>
                                                                         <div class="mt-1">
@@ -1171,6 +1263,30 @@ $unread_messages = $messages->fetchColumn();
                                                                 </div>
                                                             </div>
                                                         </div>
+                                                        
+                                                        <!-- Image Modal for each message -->
+                                                        <?php if ($message['has_image'] && !empty($message['image_path'])): ?>
+                                                            <div class="modal fade image-modal" id="imageModal<?= $message['id'] ?>" tabindex="-1" aria-hidden="true">
+                                                                <div class="modal-dialog modal-dialog-centered">
+                                                                    <div class="modal-content">
+                                                                        <div class="modal-header">
+                                                                            <h6 class="modal-title">Maintenance Image</h6>
+                                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                                        </div>
+                                                                        <div class="modal-body text-center">
+                                                                            <img src="../../../<?= htmlspecialchars($message['image_path']) ?>" 
+                                                                                 alt="Maintenance Image" 
+                                                                                 class="img-fluid">
+                                                                            <?php if (!empty($message['image_filename'])): ?>
+                                                                                <p class="mt-2 text-muted">
+                                                                                    <small><?= htmlspecialchars($message['image_filename']) ?></small>
+                                                                                </p>
+                                                                            <?php endif; ?>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        <?php endif; ?>
                                                     <?php endforeach; ?>
                                                 </div>
                                             </div>
@@ -1297,6 +1413,21 @@ $unread_messages = $messages->fetchColumn();
             if (window.innerWidth > 992) {
                 sidebar.classList.remove('active');
             }
+        });
+
+        // NEW: Image modal functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle image clicks to open modal
+            document.querySelectorAll('.message-image').forEach(function(img) {
+                img.addEventListener('click', function() {
+                    const modalId = this.getAttribute('data-bs-target');
+                    const modal = document.querySelector(modalId);
+                    if (modal) {
+                        const modalInstance = new bootstrap.Modal(modal);
+                        modalInstance.show();
+                    }
+                });
+            });
         });
 
         // COMPLETE MODAL STABILITY SOLUTION - REMOVE FADE CLASS AND USE CUSTOM IMPLEMENTATION

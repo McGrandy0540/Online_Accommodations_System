@@ -79,16 +79,16 @@ if (isset($_GET['paystack_callback']) && $_GET['paystack_callback'] === 'true') 
                 // Payment was successful
                 $amount = $tranx->data->amount / 100; // Convert from kobo to currency
                 
-                if ($amount == 20) { // GHS 20
+                if ($amount == 5) { // GHS 5
                     try {
                         $db = Database::getInstance();
                         $db->beginTransaction();
                         
                         $userId = $loginData['id'];
                         
-                        // Calculate new subscription expiry date (8 months from now)
+                        // Calculate new subscription expiry date (24 months from now)
                         $startDate = date('Y-m-d');
-                        $expiryDate = date('Y-m-d', strtotime('+8 months'));
+                        $expiryDate = date('Y-m-d', strtotime('+24 months'));
                         
                         // Update user subscription status
                         $updateUserQuery = "UPDATE users SET 
@@ -101,7 +101,7 @@ if (isset($_GET['paystack_callback']) && $_GET['paystack_callback'] === 'true') 
                         $updateStmt->bindParam(':user_id', $userId);
                         $updateStmt->execute();
                         
-                        // Get the subscription plan (8 months)
+                        // Get the subscription plan (24 months)
                         $planQuery = "SELECT * FROM subscription_plans WHERE is_active = 1 LIMIT 1";
                         $planStmt = $db->prepare($planQuery);
                         $planStmt->execute();
@@ -165,7 +165,7 @@ if (isset($_GET['paystack_callback']) && $_GET['paystack_callback'] === 'true') 
                         error_log("Subscription renewal Error: " . $e->getMessage());
                     }
                 } else {
-                    $error = 'Invalid payment amount. Expected GHS 20.';
+                    $error = 'Invalid payment amount. Expected GHS 5.';
                 }
             } else {
                 $error = 'Payment was not successful: ' . $tranx->data->gateway_response;
@@ -437,7 +437,7 @@ function logFailedAttempt($email, $ipAddress) {
         $db = Database::getInstance();
         $query = "INSERT INTO fraud_detection_logs 
                  (user_id, activity_type, risk_score, details, flagged) 
-                 SELECT id, 'failed_login', 20.00, :details, 0 
+                 SELECT id, 'failed_login', 5.00, :details, 0 
                  FROM users WHERE email = :email";
         $details = "Failed login attempt from IP: $ipAddress";
         $stmt = $db->prepare($query);
@@ -988,8 +988,8 @@ if ($step === 'otp') {
                         
                         <div class="subscription-card">
                             <h4>Premium Subscription</h4>
-                            <div class="subscription-price">GHS 20</div>
-                            <div class="subscription-duration">8 Months Access</div>
+                            <div class="subscription-price">GHS 5</div>
+                            <div class="subscription-duration">24 Months Access</div>
                             
                             <ul class="subscription-features">
                                 <li>Full access to property listings</li>
@@ -1363,7 +1363,7 @@ if ($step === 'otp') {
                     const handler = PaystackPop.setup({
                         key: '<?php echo PAYSTACK_PUBLIC_KEY; ?>',
                         email: userEmail,
-                        amount: 2000, // 20 GHS in kobo
+                        amount: 500, // 5 GHS in pesewas
                         currency: 'GHS',
                         ref: 'SUB_LOGIN_' + Math.floor((Math.random() * 1000000000) + 1),
                         metadata: {

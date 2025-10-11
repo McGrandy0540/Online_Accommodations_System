@@ -664,8 +664,8 @@ $total_cost = $monthly_price * $booking['duration_months'];
                 
                 <!-- Actions -->
                 <div class="d-flex justify-content-center gap-3 mt-4">
-                    <a href="../dashboard.php" class="btn btn-outline">
-                        <i class="fas fa-home me-2"></i> Back to Dashboard
+                    <a href="../payments/index.php" class="btn btn-outline">
+                        <i class="fas fa-home me-2"></i> Go to Payment
                     </a>
                     <a href="index.php" class="btn btn-primary">
                         <i class="fas fa-search me-2"></i> Find More Properties

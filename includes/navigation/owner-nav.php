@@ -11,5 +11,6 @@
     <li><a href="<?php echo SITE_URL; ?>/owner/bookings"><i class="fas fa-calendar-check"></i> Bookings</a></li>
     <li><a href="<?php echo SITE_URL; ?>/owner/payments"><i class="fas fa-money-bill-wave"></i> Payments</a></li>
     <li><a href="<?php echo SITE_URL; ?>/owner/reviews"><i class="fas fa-star"></i> Reviews</a></li>
+    <li><a href="<?php echo SITE_URL; ?>/owner/virtual-tours/manage_property_videos.php"><i class="fas fa-video"></i> Virtual Tours</a></li>
     <li><a href="<?php echo SITE_URL; ?>/owner/messages"><i class="fas fa-envelope"></i> Messages</a></li>
 </ul>

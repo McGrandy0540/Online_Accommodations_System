@@ -16,8 +16,6 @@ if ($_SESSION['status'] !== 'student') {
 $student_id = $_SESSION['user_id'];
 $pdo = Database::getInstance();
 
-
-
 // Fetch student data
 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$student_id]);
@@ -134,8 +132,6 @@ try {
     // Silently ignore error
 }
 
-
-
 // Function to get profile picture path
 function getProfilePicturePath($path) {
     if (empty($path)) {
@@ -146,7 +142,7 @@ function getProfilePicturePath($path) {
         return $path;
     }
     
-    return '../../uploads/profile_prictures/' . ltrim($path, '/');
+    return '../../uploads/profile_pictures/' . ltrim($path, '/');
 }
 
 $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
@@ -155,7 +151,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Student Profile | Landlords&Tenant</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
@@ -193,6 +189,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             display: flex;
             flex-direction: column;
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
         /* Header Styles */
@@ -213,7 +210,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             align-items: center;
             max-width: 1200px;
             margin: 0 auto;
-            padding: 0 20px;
+            padding: 0 15px;
         }
 
         .logo {
@@ -222,24 +219,24 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             text-decoration: none;
             color: white;
             font-weight: 600;
-            font-size: 1.4rem;
+            font-size: 1.2rem;
         }
 
         .logo img {
-            height: 60px;
-            margin-right: 10px;
+            height: 40px;
+            margin-right: 8px;
         }
 
         .user-controls {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 10px;
         }
 
         .user-profile {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             color: white;
             cursor: pointer;
         }
@@ -272,14 +269,14 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         .profile-header {
             background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             color: white;
-            padding: 2rem 1.5rem;
+            padding: 1.5rem 1rem;
             text-align: center;
             position: relative;
         }
 
         .profile-avatar {
-            width: 120px;
-            height: 120px;
+            width: 100px;
+            height: 100px;
             border-radius: 50%;
             border: 4px solid white;
             margin: 0 auto;
@@ -302,29 +299,30 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             height: 100%;
             background-color: var(--info-color);
             color: white;
-            font-size: 3rem;
+            font-size: 2.5rem;
             font-weight: bold;
         }
 
         .profile-edit-btn {
             position: absolute;
-            bottom: 10px;
-            right: 10px;
+            bottom: 5px;
+            right: 5px;
             background: white;
             border-radius: 50%;
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: var(--primary-color);
             box-shadow: var(--box-shadow);
             cursor: pointer;
+            font-size: 0.9rem;
         }
 
         .profile-name {
             margin-top: 1rem;
-            font-size: 1.5rem;
+            font-size: 1.3rem;
             font-weight: 600;
         }
 
@@ -337,12 +335,36 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             margin-top: 0.5rem;
         }
 
+        .btn {
+            padding: 10px 16px;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+        }
+
         .profile-body {
-            padding: 2rem;
+            padding: 1.5rem 1rem;
         }
 
         .section-title {
-            font-size: 1.25rem;
+            font-size: 1.1rem;
             color: var(--secondary-color);
             margin-bottom: 1.5rem;
             padding-bottom: 0.75rem;
@@ -363,28 +385,28 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
 
         .info-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
         }
 
         .info-card {
             background: white;
             border-radius: var(--border-radius);
             box-shadow: var(--card-shadow);
-            padding: 1.5rem;
+            padding: 1.2rem;
             transition: transform var(--transition-speed);
         }
 
         .info-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-3px);
         }
 
         .info-card h3 {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 1.1rem;
+            gap: 8px;
+            font-size: 1rem;
             margin-bottom: 1rem;
             color: var(--secondary-color);
         }
@@ -396,8 +418,9 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         .info-item {
             display: flex;
             justify-content: space-between;
-            padding: 0.75rem 0;
+            padding: 0.6rem 0;
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            font-size: 0.9rem;
         }
 
         .info-item:last-child {
@@ -411,6 +434,9 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
 
         .info-value {
             color: #666;
+            text-align: right;
+            max-width: 60%;
+            word-break: break-word;
         }
 
         /* Form Styles */
@@ -418,13 +444,13 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             background: white;
             border-radius: var(--border-radius);
             box-shadow: var(--card-shadow);
-            padding: 2rem;
-            max-width: 800px;
+            padding: 1.5rem;
+            max-width: 100%;
             margin: 0 auto;
         }
 
         .form-group {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.2rem;
         }
 
         .form-label {
@@ -432,6 +458,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             margin-bottom: 0.5rem;
             font-weight: 500;
             color: var(--secondary-color);
+            font-size: 0.9rem;
         }
 
         .form-control {
@@ -451,7 +478,8 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
 
         .form-row {
             display: flex;
-            gap: 1rem;
+            flex-direction: column;
+            gap: 0;
             margin-bottom: 1.5rem;
         }
 
@@ -462,33 +490,33 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         .settings-grid {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 1.5rem;
+            gap: 1.2rem;
         }
 
         .setting-card {
             background: white;
             border-radius: var(--border-radius);
             box-shadow: var(--card-shadow);
-            padding: 1.5rem;
+            padding: 1.2rem;
         }
 
         .setting-header {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 1.5rem;
+            gap: 8px;
+            margin-bottom: 1.2rem;
         }
 
         .setting-header i {
-            font-size: 1.5rem;
+            font-size: 1.3rem;
             color: var(--primary-color);
         }
 
         .switch {
             position: relative;
             display: inline-block;
-            width: 60px;
-            height: 34px;
+            width: 50px;
+            height: 28px;
         }
 
         .switch input {
@@ -512,8 +540,8 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         .slider:before {
             position: absolute;
             content: "";
-            height: 26px;
-            width: 26px;
+            height: 20px;
+            width: 20px;
             left: 4px;
             bottom: 4px;
             background-color: white;
@@ -526,21 +554,22 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         }
 
         input:checked + .slider:before {
-            transform: translateX(26px);
+            transform: translateX(22px);
         }
 
         /* Mobile Navigation */
         .mobile-nav-toggle {
-            display: none;
+            display: block;
             background: none;
             border: none;
             color: white;
             font-size: 1.5rem;
             cursor: pointer;
+            padding: 5px;
         }
 
         .mobile-nav {
-            display: none;
+            display: flex;
             background: white;
             position: fixed;
             bottom: 0;
@@ -553,6 +582,9 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         .mobile-nav ul {
             display: flex;
             list-style: none;
+            width: 100%;
+            padding: 0;
+            margin: 0;
         }
 
         .mobile-nav li {
@@ -564,10 +596,10 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 0.75rem;
+            padding: 0.6rem;
             color: var(--dark-color);
             text-decoration: none;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             transition: all 0.3s;
         }
 
@@ -576,50 +608,16 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         }
 
         .mobile-nav i {
-            font-size: 1.25rem;
-            margin-bottom: 0.25rem;
-        }
-
-        /* Responsive Styles */
-        @media (max-width: 992px) {
-            .info-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .form-row {
-                flex-direction: column;
-                gap: 0;
-            }
-            
-            .profile-header {
-                padding: 1.5rem 1rem;
-            }
-            
-            .profile-avatar {
-                width: 100px;
-                height: 100px;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .main-content {
-                padding: 1rem;
-            }
-            
-            .profile-body {
-                padding: 1.5rem 1rem;
-            }
-            
-            .form-container {
-                padding: 1.5rem;
-            }
+            font-size: 1.1rem;
+            margin-bottom: 0.2rem;
         }
 
         /* Alerts */
         .alert {
-            padding: 1rem;
-            margin-bottom: 1.5rem;
+            padding: 0.9rem;
+            margin-bottom: 1.2rem;
             border-radius: var(--border-radius);
+            font-size: 0.9rem;
         }
         
         .alert-success {
@@ -646,12 +644,13 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             flex: 1;
             margin-left: 0;
             transition: var(--transition-speed);
-            padding: 1.5rem;
+            padding: 1rem;
             background-color: #f5f7fa;
+            width: 100%;
         }
         
         .main-content-wrapper {
-            max-width: 1200px;
+            max-width: 100%;
             margin: 0 auto;
         }
         
@@ -660,13 +659,13 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.2rem;
             padding-bottom: 1rem;
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
         
         .dashboard-header h1 {
-            font-size: 1.75rem;
+            font-size: 1.5rem;
             color: var(--secondary-color);
             font-weight: 600;
             margin: 0;
@@ -689,30 +688,41 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             background-color: var(--accent-color);
             color: white;
             border-radius: 50%;
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             font-weight: bold;
         }
         
         /* Tab Navigation */
         .profile-tabs {
             display: flex;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.2rem;
             border-bottom: 1px solid #dee2e6;
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        
+        .profile-tabs::-webkit-scrollbar {
+            display: none;
         }
         
         .profile-tab {
-            padding: 0.75rem 1.5rem;
+            padding: 0.75rem 1rem;
             cursor: pointer;
             border: none;
             background: none;
             font-weight: 500;
             color: #6c757d;
             position: relative;
+            flex-shrink: 0;
+            font-size: 0.9rem;
         }
         
         .profile-tab.active {
@@ -738,24 +748,13 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             display: block;
         }
         
-        @media (max-width: 576px) {
-            .profile-tabs {
-                overflow-x: auto;
-                white-space: nowrap;
-                -webkit-overflow-scrolling: touch;
-            }
-            
-            .profile-tab {
-                padding: 0.75rem;
-            }
-        }
-        
         /* Notifications Dropdown */
         .notifications-dropdown {
-            position: absolute;
-            top: 100%;
-            right: 0;
-            width: 350px;
+            position: fixed;
+            top: 60px;
+            right: 10px;
+            width: calc(100vw - 20px);
+            max-width: 350px;
             max-height: 400px;
             overflow-y: auto;
             background: white;
@@ -771,6 +770,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             border-bottom: 1px solid #eee;
             cursor: pointer;
             transition: background-color 0.2s;
+            font-size: 0.9rem;
         }
         
         .notification-item:hover {
@@ -782,7 +782,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         }
         
         .notification-time {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             color: #777;
             margin-top: 0.25rem;
         }
@@ -801,12 +801,13 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             justify-content: center;
             z-index: 2000;
             display: none;
+            padding: 15px;
         }
         
         .cropper-container {
-            width: 90%;
-            max-width: 600px;
-            height: 400px;
+            width: 100%;
+            max-width: 400px;
+            height: 300px;
             background: white;
             border-radius: var(--border-radius);
             overflow: hidden;
@@ -816,6 +817,107 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             margin-top: 1rem;
             display: flex;
             gap: 1rem;
+            width: 100%;
+            max-width: 400px;
+            justify-content: center;
+        }
+        
+        .cropper-buttons .btn {
+            flex: 1;
+            max-width: 150px;
+        }
+        
+        /* Responsive Styles */
+        @media (min-width: 576px) {
+            .info-grid {
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            }
+            
+            .form-row {
+                flex-direction: row;
+                gap: 1rem;
+            }
+            
+            .profile-header {
+                padding: 2rem 1.5rem;
+            }
+            
+            .profile-avatar {
+                width: 120px;
+                height: 120px;
+            }
+            
+            .profile-avatar .avatar-placeholder {
+                font-size: 3rem;
+            }
+            
+            .profile-name {
+                font-size: 1.5rem;
+            }
+            
+            .dashboard-header h1 {
+                font-size: 1.75rem;
+            }
+            
+            .section-title {
+                font-size: 1.25rem;
+            }
+            
+            .info-item {
+                font-size: 1rem;
+            }
+            
+            .profile-tab {
+                font-size: 1rem;
+            }
+        }
+
+        @media (min-width: 768px) {
+            .main-content {
+                padding: 1.5rem;
+            }
+            
+            .profile-body {
+                padding: 2rem;
+            }
+            
+            .form-container {
+                padding: 2rem;
+            }
+            
+            .header-container {
+                padding: 0 20px;
+            }
+            
+            .logo {
+                font-size: 1.4rem;
+            }
+            
+            .logo img {
+                height: 60px;
+            }
+        }
+
+        @media (min-width: 992px) {
+            .info-grid {
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            }
+        }
+        
+        /* Touch-friendly improvements */
+        button, .btn, .profile-tab, .notification-bell {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        
+        input, select, textarea {
+            font-size: 16px; /* Prevents zoom on iOS */
+        }
+        
+        /* Prevent horizontal scrolling */
+        html, body {
+            max-width: 100%;
+            overflow-x: hidden;
         }
     </style>
 </head>
@@ -907,6 +1009,9 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
                             </div>
                             <div class="profile-name"><?= htmlspecialchars($student['username']) ?></div>
                             <div class="profile-status">Tenant</div>
+                            <a href="../dashboard.php" class="btn btn-primary">
+                                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                            </a>
                         </div>
                         
                         <div class="profile-body">
@@ -1116,9 +1221,14 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             
             // Close dropdown when clicking outside
             document.addEventListener('click', function(e) {
-                if (!notificationsDropdown.contains(e.target)) {
+                if (!notificationsDropdown.contains(e.target) && e.target !== notificationBell) {
                     notificationsDropdown.style.display = 'none';
                 }
+            });
+            
+            // Close dropdown on scroll (mobile)
+            window.addEventListener('scroll', function() {
+                notificationsDropdown.style.display = 'none';
             });
         }
         
@@ -1206,8 +1316,13 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
         // Mobile navigation toggle
         document.getElementById('menuToggle').addEventListener('click', function() {
             const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('active');
+            if (sidebar) {
+                sidebar.classList.toggle('active');
+            }
         });
+        
+        // Prevent zoom on input focus (iOS)
+        document.addEventListener('touchstart', function() {}, {passive: true});
     </script>
 </body>
 </html>

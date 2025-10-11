@@ -61,7 +61,7 @@ foreach ($properties_with_rooms as $property) {
 }
 
 // Calculate amount due with possible discount
-$room_fee = 50; // GHS 50 per room
+$room_fee = 20; // GHS 20 per room
 $total_amount_due = ($total_pending_payment_rooms + $total_expired_rooms) * $room_fee;
 
 // Apply 10% discount if more than 10 pending/expired rooms
@@ -805,7 +805,7 @@ $earnings = $earnings_stmt->fetch();
                                                 <?php if ($total_pending_payment_rooms > 0) echo 'and'; ?>
                                                 <strong><?= $total_expired_rooms ?> rooms</strong> that need renewal.
                                             <?php endif; ?>
-                                            Each room requires a payment of GHS 50 to be listed to students for 1 year.
+                                            Each room requires a payment of GHS 20 to be listed to students for 1 year.
                                         </p>
                                         
                                         <div class="alert alert-warning">
@@ -831,7 +831,7 @@ $earnings = $earnings_stmt->fetch();
                                                 <?php endif; ?>
                                                 <tr>
                                                     <td>Fee per Room:</td>
-                                                    <td class="text-end">GHS 50.00</td>
+                                                    <td class="text-end">GHS 20.00</td>
                                                 </tr>
                                                 <?php if ($discount > 0): ?>
                                                 <tr class="text-success">

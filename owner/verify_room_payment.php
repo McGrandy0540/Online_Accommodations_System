@@ -162,7 +162,7 @@ try {
                 pr.levy_payment_id = ?,
                 pr.payment_date = NOW(),
                 pr.transaction_id = ?,
-                pr.payment_amount = 50.00
+                pr.payment_amount = 20.00
             WHERE 
                 p.owner_id = ? 
                 AND (

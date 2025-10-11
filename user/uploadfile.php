@@ -529,7 +529,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
                         <li>Ghana Card must show full details clearly</li>
                         <li>Passport photo must be recent and clear</li>
                         <li>By uploading, you consent to share these documents with property owners for verification purposes only</li>
-                        <li>So not to to uplaod your document you will be remove from the system by the Administrator</li>
+                        <li>If documents are not uploaded you will be removed from the system by the Administrator</li>
                     </ul>
                 </div>
 

@@ -71,7 +71,7 @@ if (isset($_GET['paystack_callback']) && $_GET['paystack_callback'] === 'true') 
                 // Payment was successful
                 $amount = $tranx->data->amount / 100; // Convert from kobo to currency
                 
-                if ($amount == 20) { // GHS 20
+                if ($amount == 5) { // GHS 5
                     try {
                         $db = Database::getInstance();
                         $db->beginTransaction();
@@ -116,9 +116,9 @@ if (isset($_GET['paystack_callback']) && $_GET['paystack_callback'] === 'true') 
                             :subscription_expires_at
                         )";
                         
-                        // Calculate subscription expiry date (8 months from now)
+                        // Calculate subscription expiry date (24 months from now)
                         $startDate = date('Y-m-d');
-                        $expiryDate = date('Y-m-d', strtotime('+8 months'));
+                        $expiryDate = date('Y-m-d', strtotime('+24 months'));
                         
                         $stmt = $db->prepare($query);
                         $stmt->bindParam(':username', $registrationData['username']);
@@ -140,7 +140,7 @@ if (isset($_GET['paystack_callback']) && $_GET['paystack_callback'] === 'true') 
                                 $ownerStmt->execute();
                             }
                             
-                            // Get the subscription plan (8 months)
+                            // Get the subscription plan (24 months)
                             $planQuery = "SELECT * FROM subscription_plans WHERE is_active = 1 LIMIT 1";
                             $planStmt = $db->prepare($planQuery);
                             $planStmt->execute();
@@ -204,7 +204,7 @@ if (isset($_GET['paystack_callback']) && $_GET['paystack_callback'] === 'true') 
                         error_log("Registration after payment Error: " . $e->getMessage());
                     }
                 } else {
-                    $errors['payment'] = 'Invalid payment amount. Expected GHS 20.';
+                    $errors['payment'] = 'Invalid payment amount. Expected GHS 5.';
                 }
             } else {
                 $errors['payment'] = 'Payment was not successful: ' . $tranx->data->gateway_response;
@@ -535,13 +535,27 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
         .input-with-icon i {
             position: absolute;
             top: 50%;
-            left: 1rem;
             transform: translateY(-50%);
             color: #777;
         }
 
+        .input-with-icon .left-icon {
+            left: 1rem;
+        }
+
+        .input-with-icon .right-icon {
+            right: 1rem;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .input-with-icon .right-icon:hover {
+            color: var(--primary-color);
+        }
+
         .input-with-icon input {
             padding-left: 3rem;
+            padding-right: 3rem;
         }
 
         .btn {
@@ -780,6 +794,23 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
                 flex-direction: column;
                 gap: 0.5rem;
             }
+            
+            .input-with-icon input {
+                padding-left: 2.5rem;
+                padding-right: 2.5rem;
+            }
+            
+            .input-with-icon i {
+                font-size: 0.9rem;
+            }
+            
+            .input-with-icon .left-icon {
+                left: 0.8rem;
+            }
+            
+            .input-with-icon .right-icon {
+                right: 0.8rem;
+            }
         }
     </style>
 </head>
@@ -818,7 +849,7 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
                             <i class="fas fa-check-circle"></i> 
                             <?php 
                             if (isset($_GET['subscribed']) && $_GET['subscribed'] == 1) {
-                                echo 'Registration and payment successful! Your subscription is active for 8 months. You can now login.';
+                                echo 'Registration and payment successful! Your subscription is active for 24 months. You can now login.';
                             } elseif (isset($_GET['message'])) {
                                 echo htmlspecialchars($_GET['message']) . ' You can now login.';
                             } else {
@@ -857,7 +888,7 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
                         <div class="form-group">
                             <label for="email">Email Address</label>
                             <div class="input-with-icon">
-                                <i class="fas fa-envelope"></i>
+                                <i class="fas fa-envelope left-icon"></i>
                                 <input type="email" id="email" name="email" class="form-control" 
                                        value="<?php echo htmlspecialchars($formData['email']); ?>" required>
                             </div>
@@ -869,8 +900,9 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
                         <div class="form-group">
                             <label for="password">Password</label>
                             <div class="input-with-icon">
-                                <i class="fas fa-lock"></i>
+                                <i class="fas fa-lock left-icon"></i>
                                 <input type="password" id="password" name="password" class="form-control" required>
+                                <i class="fas fa-eye right-icon toggle-password" data-target="password"></i>
                             </div>
                             <?php if (isset($errors['password'])): ?>
                                 <span class="text-danger"><i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($errors['password']); ?></span>
@@ -880,8 +912,9 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
                         <div class="form-group">
                             <label for="confirm_password">Confirm Password</label>
                             <div class="input-with-icon">
-                                <i class="fas fa-lock"></i>
+                                <i class="fas fa-lock left-icon"></i>
                                 <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
+                                <i class="fas fa-eye right-icon toggle-password" data-target="confirm_password"></i>
                             </div>
                             <?php if (isset($errors['confirm_password'])): ?>
                                 <span class="text-danger"><i class="fas fa-exclamation-circle"></i> <?php echo htmlspecialchars($errors['confirm_password']); ?></span>
@@ -891,7 +924,7 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
                         <div class="form-group">
                             <label for="phone_number">Phone Number</label>
                             <div class="input-with-icon">
-                                <i class="fas fa-phone"></i>
+                                <i class="fas fa-phone left-icon"></i>
                                 <input type="tel" id="phone_number" name="phone_number" class="form-control" 
                                        value="<?php echo htmlspecialchars($formData['phone_number']); ?>" required>
                             </div>
@@ -903,7 +936,7 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
                         <div class="form-group">
                             <label for="location">Location</label>
                             <div class="input-with-icon">
-                                <i class="fas fa-map-marker-alt"></i>
+                                <i class="fas fa-map-marker-alt left-icon"></i>
                                 <input type="text" id="location" name="location" class="form-control" 
                                        value="<?php echo htmlspecialchars($formData['location']); ?>" required>
                             </div>
@@ -956,8 +989,8 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
                             
                             <div class="subscription-card">
                                 <h4>Premium Subscription</h4>
-                                <div class="subscription-price">GHS 20</div>
-                                <div class="subscription-duration">8 Months Access</div>
+                                <div class="subscription-price">GHS 5</div>
+                                <div class="subscription-duration">24 Months Access</div>
                                 
                                 <ul class="subscription-features">
                                     <li>Full access to property listings</li>
@@ -997,6 +1030,27 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
     <script>
         // Registration form handling
         document.addEventListener('DOMContentLoaded', function() {
+            // Password visibility toggle functionality
+            const toggleButtons = document.querySelectorAll('.toggle-password');
+            
+            toggleButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const targetId = this.getAttribute('data-target');
+                    const passwordInput = document.getElementById(targetId);
+                    const icon = this;
+                    
+                    if (passwordInput.type === 'password') {
+                        passwordInput.type = 'text';
+                        icon.classList.remove('fa-eye');
+                        icon.classList.add('fa-eye-slash');
+                    } else {
+                        passwordInput.type = 'password';
+                        icon.classList.remove('fa-eye-slash');
+                        icon.classList.add('fa-eye');
+                    }
+                });
+            });
+            
             // Paystack payment integration
             const paystackBtn = document.getElementById('paystack-btn');
             if (paystackBtn) {
@@ -1017,7 +1071,7 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
                     const handler = PaystackPop.setup({
                         key: '<?php echo PAYSTACK_PUBLIC_KEY; ?>',
                         email: userEmail,
-                        amount: 2000, // 20 GHS in kobo
+                        amount: 500, // 5 GHS in kobo
                         currency: 'GHS',
                         ref: 'SUB' + Math.floor((Math.random() * 1000000000) + 1),
                         metadata: {
@@ -1056,8 +1110,54 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
             if (firstInput) {
                 firstInput.focus();
             }
+            
+            // Real-time password strength indicator (optional enhancement)
+            const passwordInput = document.getElementById('password');
+            if (passwordInput) {
+                passwordInput.addEventListener('input', function() {
+                    const password = this.value;
+                    const strengthIndicator = document.getElementById('password-strength');
+                    
+                    if (!strengthIndicator) {
+                        // Create strength indicator if it doesn't exist
+                        const indicator = document.createElement('div');
+                        indicator.id = 'password-strength';
+                        indicator.style.marginTop = '5px';
+                        indicator.style.fontSize = '0.8rem';
+                        this.parentNode.appendChild(indicator);
+                    }
+                    
+                    const indicator = document.getElementById('password-strength');
+                    let strength = 0;
+                    let feedback = '';
+                    
+                    if (password.length >= 8) strength++;
+                    if (/[A-Z]/.test(password)) strength++;
+                    if (/[a-z]/.test(password)) strength++;
+                    if (/[0-9]/.test(password)) strength++;
+                    if (/[^A-Za-z0-9]/.test(password)) strength++;
+                    
+                    switch(strength) {
+                        case 0:
+                        case 1:
+                            feedback = '<span style="color: var(--accent-color);">Weak password</span>';
+                            break;
+                        case 2:
+                        case 3:
+                            feedback = '<span style="color: var(--warning-color);">Medium password</span>';
+                            break;
+                        case 4:
+                            feedback = '<span style="color: var(--success-color);">Strong password</span>';
+                            break;
+                        case 5:
+                            feedback = '<span style="color: var(--success-color);">Very strong password</span>';
+                            break;
+                    }
+                    
+                    indicator.innerHTML = feedback;
+                });
+            }
         });
     </script>
 </body>
 </html>
-<?php ob_end_flush(); ?>

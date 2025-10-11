@@ -1,6 +1,6 @@
 <?php
 
-require_once 'SMSService.php';
+require_once 'SMSNotification.php';
 
 class NotificationService {
     private $pdo;

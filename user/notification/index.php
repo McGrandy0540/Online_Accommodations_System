@@ -1,7 +1,7 @@
 <?php
 session_start();
-require_once __DIR__ . '../../../config/database.php';
-require_once __DIR__ . '../../../includes/SMSService.php';
+require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../includes/SMSNotification.php';
 
 // Check if user is logged in and is a student
 if (!isset($_SESSION['user_id'])) {
@@ -41,7 +41,7 @@ try {
 }
 
 // Initialize Notification Service
-require_once __DIR__ . '../../../includes/NotificationService.php';
+require_once __DIR__ . '/../../includes/NotificationService.php';
 $notificationService = new NotificationService();
 
 // Process undelivered notifications and send SMS when student views notifications
