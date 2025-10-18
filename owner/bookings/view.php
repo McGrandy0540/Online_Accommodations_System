@@ -2,6 +2,7 @@
 // bookings/view.php - Booking Details Page
 session_start();
 require_once '../../config/database.php';
+require_once '../../includes/NotificationService.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -63,19 +64,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if ($new_status) {
-        $update_stmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE id = ?");
-        $update_stmt->execute([$new_status, $booking_id]);
+        // Begin transaction to ensure data consistency
+        $pdo->beginTransaction();
         
-        // Reload booking data
-        $stmt->execute([$booking_id]);
-        $booking = $stmt->fetch();
-        
-        // Send notification to the other party
-        $recipient_id = $is_owner ? $booking['user_id'] : $booking['owner_id'];
-        $message = "Booking #{$booking_id} status changed to " . ucfirst($new_status);
-        
-        $notif_stmt = $pdo->prepare("INSERT INTO notifications (user_id, message, type, created_at) VALUES (?, ?, 'booking_update', NOW())");
-        $notif_stmt->execute([$recipient_id, $message]);
+        try {
+            $update_stmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE id = ?");
+            $update_stmt->execute([$new_status, $booking_id]);
+            
+            // If cancelling a booking, update room occupancy
+            if ($new_status === 'cancelled' && $booking['room_id']) {
+                // Decrement current_occupancy and increment available_spots
+                $room_update = $pdo->prepare("
+                    UPDATE property_rooms 
+                    SET current_occupancy = GREATEST(current_occupancy - 1, 0),
+                        available_spots = LEAST(available_spots + 1, capacity)
+                    WHERE id = ?
+                ");
+                $room_update->execute([$booking['room_id']]);
+                
+                // Update room status based on current occupancy
+                $status_update = $pdo->prepare("
+                    UPDATE property_rooms
+                    SET status = CASE 
+                        WHEN current_occupancy < capacity THEN 'available'
+                        ELSE 'occupied'
+                    END
+                    WHERE id = ?
+                ");
+                $status_update->execute([$booking['room_id']]);
+            }
+            
+            $pdo->commit();
+            
+            // Reload booking data
+            $stmt->execute([$booking_id]);
+            $booking = $stmt->fetch();
+            
+            // Send notification using NotificationService (automatically sends email and SMS)
+            $notificationService = new NotificationService();
+            $recipient_id = $is_owner ? $booking['user_id'] : $booking['owner_id'];
+            
+            // Prepare detailed notification message based on status
+            if ($new_status === 'confirmed') {
+                $message = "Good news! Your booking for {$booking['property_name']} has been confirmed by the property owner.";
+                if ($booking['room_number']) {
+                    $message .= " You've been assigned to Room {$booking['room_number']}.";
+                }
+                $message .= " Check-in date: " . date('M j, Y', strtotime($booking['start_date']));
+            } elseif ($new_status === 'cancelled') {
+                $message = "Your booking for {$booking['property_name']} has been cancelled.";
+                if (!$is_owner) {
+                    $message = "The booking request for {$booking['property_name']} has been cancelled by the student.";
+                }
+            } elseif ($new_status === 'paid') {
+                $message = "Payment confirmed! Your booking for {$booking['property_name']} is now fully paid.";
+            } else {
+                $message = "Booking #{$booking_id} status changed to " . ucfirst($new_status);
+            }
+            
+            // Use NotificationService to create notification with automatic email & SMS
+            $notificationService->sendBookingNotification(
+                $recipient_id,
+                $booking_id,
+                $new_status,
+                $booking['property_name'],
+                $booking['room_number'] ?? null,
+                true // Send email
+            );
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            // Handle error appropriately
+            error_log("Error updating booking status: " . $e->getMessage());
+        }
     }
 }
 

@@ -2,6 +2,11 @@
 require_once __DIR__ . '../../../config/database.php';
 $db = Database::getInstance();
 
+// Start session for error messages
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 // Check if user ID is provided
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     header("Location: index.php");
@@ -27,10 +32,26 @@ try {
     exit();
 }
 
+// Get profile picture path
+function getProfilePicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    }
+    
+    return '../../../' . ltrim($path, '/');
+}
+
+$profile_pic_path = getProfilePicturePath($user['profile_picture'] ?? '');
+
 // Fetch additional user data based on their status
 $userProperties = [];
 $userBookings = [];
 $userReviews = [];
+$creditHistory = [];
 
 if ($user['status'] === 'property_owner') {
     // Get properties owned by this user
@@ -59,7 +80,14 @@ if ($user['status'] === 'property_owner') {
     $userReviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-
+// Get credit score history
+try {
+    $stmt = $db->prepare("SELECT * FROM credit_score_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 5");
+    $stmt->execute([$userId]);
+    $creditHistory = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    // Credit history table might not exist, ignore error
+}
 
 // Generate avatar initials
 $userInitial = strtoupper(substr($user['username'], 0, 1));
@@ -113,7 +141,7 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 2rem;
+            padding: 1rem;
         }
 
         .header {
@@ -134,8 +162,8 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
             background-color: var(--white);
             border-radius: var(--radius-md);
             box-shadow: var(--shadow-md);
-            padding: 2rem;
-            margin-bottom: 2rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
         }
 
         .profile-header {
@@ -151,8 +179,8 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
         }
 
         .profile-avatar {
-            width: 120px;
-            height: 120px;
+            width: 100px;
+            height: 100px;
             border-radius: 50%;
             object-fit: cover;
             border: 4px solid var(--light-gray);
@@ -163,15 +191,19 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 120px;
-            height: 120px;
+            width: 100px;
+            height: 100px;
             border-radius: 50%;
             background-color: var(--primary);
             color: var(--white);
-            font-size: 3rem;
+            font-size: 2.5rem;
             font-weight: bold;
             border: 4px solid var(--light-gray);
             box-shadow: var(--shadow-sm);
+        }
+
+        .hidden {
+            display: none !important;
         }
 
         .profile-info {
@@ -189,6 +221,7 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
         .profile-email {
             color: var(--gray);
             margin-bottom: 1rem;
+            word-break: break-word;
         }
 
         .profile-meta {
@@ -207,6 +240,7 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
 
         .meta-icon {
             color: var(--primary);
+            min-width: 16px;
         }
 
         .status-badge {
@@ -243,14 +277,14 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
         }
 
         .info-card {
             background-color: var(--light);
             border-radius: var(--radius-md);
-            padding: 1.5rem;
+            padding: 1.25rem;
             box-shadow: var(--shadow-sm);
         }
 
@@ -274,9 +308,10 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
 
         .table-responsive {
             overflow-x: auto;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
             border-radius: var(--radius-md);
             box-shadow: var(--shadow-sm);
+            -webkit-overflow-scrolling: touch;
         }
 
         table {
@@ -286,7 +321,7 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
         }
 
         th, td {
-            padding: 1rem;
+            padding: 0.75rem;
             text-align: left;
             border-bottom: 1px solid var(--light-gray);
         }
@@ -295,6 +330,8 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
             background-color: var(--light);
             font-weight: 600;
             color: var(--dark);
+            position: sticky;
+            left: 0;
         }
 
         tr:hover {
@@ -314,6 +351,7 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
             transition: var(--transition);
             border: none;
             text-decoration: none;
+            text-align: center;
         }
 
         .btn-primary {
@@ -373,17 +411,40 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
             font-weight: bold;
         }
 
+        /* Mobile-First Responsive Design */
         @media (max-width: 768px) {
             .container {
-                padding: 1rem;
+                padding: 0.5rem;
+            }
+            
+            .header {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+                gap: 1rem;
             }
             
             .profile-header {
                 flex-direction: column;
                 text-align: center;
+                gap: 1.5rem;
+            }
+            
+            .profile-avatar,
+            .avatar-initials {
+                width: 80px;
+                height: 80px;
+                font-size: 2rem;
             }
             
             .profile-meta {
+                justify-content: center;
+                gap: 1rem;
+            }
+            
+            .meta-item {
+                flex: 1;
+                min-width: 120px;
                 justify-content: center;
             }
             
@@ -398,10 +459,163 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
             
             .grid {
                 grid-template-columns: 1fr;
+                gap: 0.75rem;
             }
             
             .card {
-                padding: 1.5rem;
+                padding: 1rem;
+                margin-bottom: 1rem;
+            }
+            
+            table {
+                font-size: 0.875rem;
+            }
+            
+            th, td {
+                padding: 0.5rem;
+            }
+            
+            .section-title {
+                font-size: 1.1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .profile-name {
+                font-size: 1.25rem;
+            }
+            
+            .profile-meta {
+                flex-direction: column;
+                align-items: center;
+                gap: 0.5rem;
+            }
+            
+            .meta-item {
+                min-width: auto;
+                justify-content: flex-start;
+            }
+            
+            .info-card {
+                padding: 1rem;
+            }
+            
+            .info-value {
+                font-size: 1.1rem;
+            }
+            
+            .table-responsive {
+                border-radius: var(--radius-sm);
+            }
+            
+            table {
+                min-width: 500px;
+            }
+        }
+
+        /* Enhanced Mobile Table Styles */
+        .mobile-table-view {
+            display: none;
+        }
+
+        @media (max-width: 640px) {
+            .desktop-table {
+                display: none;
+            }
+            
+            .mobile-table-view {
+                display: block;
+            }
+            
+            .mobile-card {
+                background: var(--white);
+                border-radius: var(--radius-md);
+                padding: 1rem;
+                margin-bottom: 1rem;
+                box-shadow: var(--shadow-sm);
+                border-left: 4px solid var(--primary);
+            }
+            
+            .mobile-card-row {
+                display: flex;
+                justify-content: between;
+                margin-bottom: 0.5rem;
+                padding-bottom: 0.5rem;
+                border-bottom: 1px solid var(--light-gray);
+            }
+            
+            .mobile-card-row:last-child {
+                border-bottom: none;
+                margin-bottom: 0;
+            }
+            
+            .mobile-label {
+                font-weight: 600;
+                color: var(--gray);
+                min-width: 100px;
+            }
+            
+            .mobile-value {
+                flex: 1;
+                text-align: right;
+            }
+        }
+
+        /* Loading States */
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: var(--radius-sm);
+        }
+
+        @keyframes loading {
+            0% {
+                background-position: 200% 0;
+            }
+            100% {
+                background-position: -200% 0;
+            }
+        }
+
+        /* Touch-friendly enhancements */
+        @media (hover: none) and (pointer: coarse) {
+            .btn:hover {
+                transform: none;
+            }
+            
+            tr:hover {
+                background-color: transparent;
+            }
+            
+            .btn {
+                padding: 1rem 1.5rem;
+            }
+        }
+
+        /* High contrast mode support */
+        @media (prefers-contrast: high) {
+            :root {
+                --light-gray: #000;
+                --gray: #333;
+                --dark: #000;
+            }
+            
+            .card {
+                border: 2px solid var(--dark);
+            }
+        }
+
+        /* Reduced motion support */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            
+            .btn {
+                transition: none;
             }
         }
     </style>
@@ -426,8 +640,8 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
         <div class="card">
             <div class="profile-header">
                 <div class="profile-picture-container">
-                    <?php if (!empty($user['profile_picture'])): ?>
-                        <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>" 
+                    <?php if (!empty($profile_pic_path)): ?>
+                        <img src="<?php echo htmlspecialchars($profile_pic_path); ?>" 
                              alt="Profile Picture" 
                              class="profile-avatar"
                              onerror="this.onerror=null; this.classList.add('hidden'); document.getElementById('avatar-initials').classList.remove('hidden');">
@@ -448,11 +662,11 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
                         </span>
                         <span class="meta-item">
                             <i class="fas fa-map-marker-alt meta-icon"></i>
-                            <?php echo htmlspecialchars($user['location']); ?>
+                            <?php echo htmlspecialchars($user['location'] ?? 'Not specified'); ?>
                         </span>
                         <span class="meta-item">
                             <i class="fas fa-phone meta-icon"></i>
-                            <?php echo htmlspecialchars($user['phone_number']); ?>
+                            <?php echo htmlspecialchars($user['phone_number'] ?? 'Not specified'); ?>
                         </span>
                         <span class="meta-item">
                             <i class="fas fa-calendar-alt meta-icon"></i>
@@ -466,24 +680,31 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
                 <div class="info-card">
                     <div class="info-title">Payment Method</div>
                     <div class="info-value">
-                        <?php echo ucfirst(str_replace('_', ' ', $user['payment_method'])); ?>
+                        <?php echo ucfirst(str_replace('_', ' ', $user['payment_method'] ?? 'Not specified')); ?>
                     </div>
                 </div>
                 
                 <div class="info-card">
-                    <div class="info-title">Notification Preferences</div>
+                    <div class="info-title">Credit Score</div>
+                    <div class="info-value credit-score">
+                        <?php echo number_format($user['credit_score'] ?? 100, 1); ?>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <div class="info-title">Notifications</div>
                     <div class="info-value">
-                        <?php if ($user['email_notifications']): ?>
+                        <?php if ($user['email_notifications'] ?? false): ?>
                             <span style="display: inline-block; margin-right: 1rem;">
                                 <i class="fas fa-envelope" style="color: var(--primary);"></i> Email
                             </span>
                         <?php endif; ?>
-                        <?php if ($user['sms_notifications']): ?>
+                        <?php if ($user['sms_notifications'] ?? false): ?>
                             <span style="display: inline-block;">
                                 <i class="fas fa-sms" style="color: var(--primary);"></i> SMS
                             </span>
                         <?php endif; ?>
-                        <?php if (!$user['email_notifications'] && !$user['sms_notifications']): ?>
+                        <?php if (!($user['email_notifications'] ?? false) && !($user['sms_notifications'] ?? false)): ?>
                             None
                         <?php endif; ?>
                     </div>
@@ -492,7 +713,9 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
 
             <?php if (!empty($creditHistory)): ?>
                 <h3 class="section-title"><i class="fas fa-chart-line"></i> Credit Score History</h3>
-                <div class="table-responsive">
+                
+                <!-- Desktop Table -->
+                <div class="table-responsive desktop-table">
                     <table>
                         <thead>
                             <tr>
@@ -500,28 +723,55 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
                                 <th>Change</th>
                                 <th>New Score</th>
                                 <th>Reason</th>
-                                <th>Changed By</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($creditHistory as $history): ?>
                                 <tr>
                                     <td><?php echo date('M d, Y', strtotime($history['created_at'])); ?></td>
-                                    <td><?php echo $history['score_change'] > 0 ? '+' : ''; ?><?php echo $history['score_change']; ?></td>
+                                    <td style="color: <?php echo $history['score_change'] > 0 ? 'green' : 'red'; ?>">
+                                        <?php echo $history['score_change'] > 0 ? '+' : ''; ?><?php echo $history['score_change']; ?>
+                                    </td>
                                     <td><?php echo $history['new_score']; ?></td>
-                                    <td><?php echo htmlspecialchars($history['reason']); ?></td>
-                                    <td><?php echo ucfirst($history['changed_by']); ?></td>
+                                    <td><?php echo htmlspecialchars($history['reason'] ?? 'N/A'); ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                </div>
+
+                <!-- Mobile Cards -->
+                <div class="mobile-table-view">
+                    <?php foreach ($creditHistory as $history): ?>
+                        <div class="mobile-card">
+                            <div class="mobile-card-row">
+                                <span class="mobile-label">Date</span>
+                                <span class="mobile-value"><?php echo date('M d, Y', strtotime($history['created_at'])); ?></span>
+                            </div>
+                            <div class="mobile-card-row">
+                                <span class="mobile-label">Change</span>
+                                <span class="mobile-value" style="color: <?php echo $history['score_change'] > 0 ? 'green' : 'red'; ?>">
+                                    <?php echo $history['score_change'] > 0 ? '+' : ''; ?><?php echo $history['score_change']; ?>
+                                </span>
+                            </div>
+                            <div class="mobile-card-row">
+                                <span class="mobile-label">New Score</span>
+                                <span class="mobile-value"><?php echo $history['new_score']; ?></span>
+                            </div>
+                            <div class="mobile-card-row">
+                                <span class="mobile-label">Reason</span>
+                                <span class="mobile-value"><?php echo htmlspecialchars($history['reason'] ?? 'N/A'); ?></span>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             <?php endif; ?>
 
             <?php if ($user['status'] === 'property_owner'): ?>
                 <h3 class="section-title"><i class="fas fa-home"></i> Properties</h3>
                 <?php if (!empty($userProperties)): ?>
-                    <div class="table-responsive">
+                    <!-- Desktop Table -->
+                    <div class="table-responsive desktop-table">
                         <table>
                             <thead>
                                 <tr>
@@ -536,7 +786,7 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
                                 <?php foreach ($userProperties as $property): ?>
                                     <tr>
                                         <td><?php echo htmlspecialchars($property['property_name']); ?></td>
-                                        <td>$<?php echo number_format($property['price'], 2); ?></td>
+                                        <td>GHS<?php echo number_format($property['price'], 2); ?></td>
                                         <td><?php echo htmlspecialchars($property['location']); ?></td>
                                         <td>
                                             <span class="status-badge">
@@ -549,8 +799,39 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
                             </tbody>
                         </table>
                     </div>
+
+                    <!-- Mobile Cards -->
+                    <div class="mobile-table-view">
+                        <?php foreach ($userProperties as $property): ?>
+                            <div class="mobile-card">
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Property</span>
+                                    <span class="mobile-value"><?php echo htmlspecialchars($property['property_name']); ?></span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Price</span>
+                                    <span class="mobile-value">GHS<?php echo number_format($property['price'], 2); ?></span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Location</span>
+                                    <span class="mobile-value"><?php echo htmlspecialchars($property['location']); ?></span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Status</span>
+                                    <span class="mobile-value">
+                                        <span class="status-badge"><?php echo ucfirst($property['status']); ?></span>
+                                    </span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Created</span>
+                                    <span class="mobile-value"><?php echo date('M d, Y', strtotime($property['created_at'])); ?></span>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+
                     <div class="action-buttons">
-                        <a href="/admin/properties/index.php?owner=<?php echo $userId; ?>" class="btn btn-secondary">
+                        <a href="../properties/index.php?owner=<?php echo $userId; ?>" class="btn btn-secondary">
                             <i class="fas fa-list"></i> View All Properties
                         </a>
                     </div>
@@ -563,7 +844,9 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
             <?php elseif ($user['status'] === 'student'): ?>
                 <?php if (!empty($userBookings)): ?>
                     <h3 class="section-title"><i class="fas fa-calendar-check"></i> Recent Bookings</h3>
-                    <div class="table-responsive">
+                    
+                    <!-- Desktop Table -->
+                    <div class="table-responsive desktop-table">
                         <table>
                             <thead>
                                 <tr>
@@ -594,16 +877,46 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
                             </tbody>
                         </table>
                     </div>
-                    <div class="action-buttons">
-                        <a href="/admin/bookings/index.php?user=<?php echo $userId; ?>" class="btn btn-secondary">
-                            <i class="fas fa-list"></i> View All Bookings
-                        </a>
+
+                    <!-- Mobile Cards -->
+                    <div class="mobile-table-view">
+                        <?php foreach ($userBookings as $booking): ?>
+                            <div class="mobile-card">
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Property</span>
+                                    <span class="mobile-value"><?php echo htmlspecialchars($booking['property_name']); ?></span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Dates</span>
+                                    <span class="mobile-value">
+                                        <?php echo date('M d, Y', strtotime($booking['start_date'])); ?> - 
+                                        <?php echo date('M d, Y', strtotime($booking['end_date'])); ?>
+                                    </span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Duration</span>
+                                    <span class="mobile-value"><?php echo $booking['duration_months']; ?> months</span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Status</span>
+                                    <span class="mobile-value">
+                                        <span class="status-badge"><?php echo ucfirst($booking['status']); ?></span>
+                                    </span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Booked On</span>
+                                    <span class="mobile-value"><?php echo date('M d, Y', strtotime($booking['booking_date'])); ?></span>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
 
                 <?php if (!empty($userReviews)): ?>
                     <h3 class="section-title"><i class="fas fa-star"></i> Recent Reviews</h3>
-                    <div class="table-responsive">
+                    
+                    <!-- Desktop Table -->
+                    <div class="table-responsive desktop-table">
                         <table>
                             <thead>
                                 <tr>
@@ -629,6 +942,34 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
                             </tbody>
                         </table>
                     </div>
+
+                    <!-- Mobile Cards -->
+                    <div class="mobile-table-view">
+                        <?php foreach ($userReviews as $review): ?>
+                            <div class="mobile-card">
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Property</span>
+                                    <span class="mobile-value"><?php echo htmlspecialchars($review['property_name']); ?></span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Rating</span>
+                                    <span class="mobile-value">
+                                        <span class="rating">
+                                            <?php echo str_repeat('★', $review['rating']) . str_repeat('☆', 5 - $review['rating']); ?>
+                                        </span>
+                                    </span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Comment</span>
+                                    <span class="mobile-value"><?php echo !empty($review['comment']) ? htmlspecialchars(substr($review['comment'], 0, 50)) . (strlen($review['comment']) > 50 ? '...' : '') : 'No comment'; ?></span>
+                                </div>
+                                <div class="mobile-card-row">
+                                    <span class="mobile-label">Date</span>
+                                    <span class="mobile-value"><?php echo date('M d, Y', strtotime($review['created_at'])); ?></span>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 <?php endif; ?>
             <?php endif; ?>
         </div>
@@ -641,19 +982,63 @@ $userInitial = strtoupper(substr($user['username'], 0, 1));
             if (avatar) {
                 avatar.onerror = function() {
                     this.classList.add('hidden');
-                    document.getElementById('avatar-initials').classList.remove('hidden');
+                    const initials = document.getElementById('avatar-initials');
+                    if (initials) {
+                        initials.classList.remove('hidden');
+                    }
                 };
             }
-            
-            // Make tables more responsive on small screens
-            const tables = document.querySelectorAll('table');
-            tables.forEach(table => {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'table-responsive';
-                table.parentNode.insertBefore(wrapper, table);
-                wrapper.appendChild(table);
+
+            // Enhanced touch interactions
+            const buttons = document.querySelectorAll('.btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('touchstart', function() {
+                    this.style.transform = 'scale(0.98)';
+                });
+                
+                btn.addEventListener('touchend', function() {
+                    this.style.transform = '';
+                });
             });
+
+            // Handle orientation changes
+            window.addEventListener('orientationchange', function() {
+                setTimeout(() => {
+                    window.scrollTo(0, 0);
+                }, 100);
+            });
+
+            // Improved table scrolling on mobile
+            const tables = document.querySelectorAll('.table-responsive');
+            tables.forEach(table => {
+                let isScrolling;
+                table.addEventListener('scroll', function() {
+                    window.clearTimeout(isScrolling);
+                    isScrolling = setTimeout(() => {
+                        // Smooth scroll behavior
+                    }, 66);
+                }, false);
+            });
+
+            // Load more functionality for mobile
+            let currentPage = 1;
+            const loadMoreBtn = document.createElement('button');
+            loadMoreBtn.className = 'btn btn-secondary';
+            loadMoreBtn.innerHTML = '<i class="fas fa-plus"></i> Load More';
+            loadMoreBtn.style.display = 'none';
+            
+            // You can implement actual load more functionality here
+            // based on your backend pagination system
         });
+
+        // Handle resize events for better mobile experience
+        window.addEventListener('resize', function() {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+        });
+
+        // Initialize viewport height variable
+        document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
     </script>
 </body>
 </html>

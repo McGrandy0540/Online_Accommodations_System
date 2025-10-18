@@ -818,7 +818,10 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
     <!-- Header -->
     <header>
         <div class="container header-container">
-            <a href="../index.php" class="logo">Landlords<span>&Tenants</span></a>
+            <a href="../index.php" class="logo">
+                 <img src="../assets/images/landlords-logo.png" alt="Logo" width="100" height="80" class="me-2">
+                Landlords<span>&Tenants</span>
+        </a>
         </div>
     </header>
 
@@ -1032,6 +1035,7 @@ if (isset($_GET['step']) && $_GET['step'] === 'payment') {
         document.addEventListener('DOMContentLoaded', function() {
             // Password visibility toggle functionality
             const toggleButtons = document.querySelectorAll('.toggle-password');
+            
             
             toggleButtons.forEach(button => {
                 button.addEventListener('click', function() {

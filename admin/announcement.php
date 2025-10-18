@@ -24,6 +24,47 @@ require_once  '../config/email.php';
 $database = new Database();
 $pdo = $database->connect();
 
+
+/// Get user data from session and database
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'] ?? 'Admin';
+$email = $_SESSION['email'] ?? '';
+$avatar = $_SESSION['avatar'] ?? 'https://randomuser.me/api/portraits/men/32.jpg';
+$status = $_SESSION['status'] ?? 'admin';
+
+// Fetch additional user details from database
+try {
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$user) {
+        throw new Exception("User not found");
+    }
+    
+} catch (PDOException $e) {
+    error_log("Database Error: " . $e->getMessage());
+    $error = "Failed to load user data. Please try again later.";
+} catch (Exception $e) {
+    error_log("Error: " . $e->getMessage());
+    $error = $e->getMessage();
+}
+
+// Get profile picture path
+function getProfilePicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    }
+    
+    return '../' . ltrim($path, '/');
+}
+
+$profile_pic_path = getProfilePicturePath($user['profile_picture'] ?? '');
+
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['create_announcement'])) {
@@ -503,7 +544,7 @@ try {
                     <li><a href="../admin/payments/"><i class="fas fa-wallet"></i> Payment Management</a></li>
                     <li><a href="../admin/reports/"><i class="fas fa-file-invoice-dollar"></i> Financial Reports</a></li>
                     <li><a href="../admin/approvals/"><i class="fas fa-calendar-alt"></i> Booking Approvals</a></li>
-                    <li><a href="../admin/admins/"><i class="fas fa-user-shield"></i> Admin Users</a></li>
+                    <li><a href="../admin/profile/"><i class="fas fa-user-cog"></i> Profile Settings</a></li>
                     <li><a href="../admin/announcement.php" class="active"><i class="fa-solid fa-bullhorn"></i> Announcements</a></li>
                 </ul>
             </div>
@@ -517,7 +558,7 @@ try {
                     <i class="fas fa-bars"></i>
                 </div>
                 <div class="user-profile">
-                    <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="User Profile">
+                    <img src="<?= htmlspecialchars($profile_pic_path)?>" alt="User Profile">
                     <span><?php echo htmlspecialchars($_SESSION['username'] ?? 'Admin'); ?> <span class="admin-badge">ADMIN</span></span>
                 </div>
             </div>

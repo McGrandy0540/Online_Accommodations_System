@@ -16,6 +16,46 @@ require_once __DIR__. '../../../config/database.php';
 $database = new Database();
 $pdo = $database->connect();
 
+/// Get user data from session and database
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'] ?? 'Admin';
+$email = $_SESSION['email'] ?? '';
+$avatar = $_SESSION['avatar'] ?? 'https://randomuser.me/api/portraits/men/32.jpg';
+$status = $_SESSION['status'] ?? 'admin';
+
+// Fetch additional user details from database
+try {
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$user) {
+        throw new Exception("User not found");
+    }
+    
+} catch (PDOException $e) {
+    error_log("Database Error: " . $e->getMessage());
+    $error = "Failed to load user data. Please try again later.";
+} catch (Exception $e) {
+    error_log("Error: " . $e->getMessage());
+    $error = $e->getMessage();
+}
+
+// Get profile picture path
+function getProfilePicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    }
+    
+    return '../../' . ltrim($path, '/');
+}
+
+$profile_pic_path = getProfilePicturePath($user['profile_picture'] ?? '');
+
 // Initialize filter variables
 $statusFilter = $_GET['status'] ?? 'all';
 $methodFilter = $_GET['method'] ?? 'all';
@@ -705,7 +745,6 @@ if (isset($_GET['export'])) {
                 <ul>
                     <li><a href="../dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
                     <li><a href="../properties/index.php"><i class="fas fa-home"></i> Properties</a></li>
-                    <li><a href="../bookings/index.php"><i class="fas fa-calendar-check"></i> Bookings</a></li>
                     <li><a href="index.php" class="active"><i class="fas fa-money-bill-wave"></i> Payments</a></li>
                     <li><a href="levy_payment.php" class="active"><i class="fas fa-money-bill-wave"></i>levy Payments</a></li>
                     <li><a href="../users/index.php"><i class="fas fa-users"></i> Users</a></li>
@@ -723,7 +762,7 @@ if (isset($_GET['export'])) {
                     <i class="fas fa-bars"></i>
                 </button>
                 <div class="user-profile">
-                    <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="User Profile" style="width: 30px; height: 30px; border-radius: 50%;">
+                    <img src="<?= htmlspecialchars($profile_pic_path)?>" alt="User Profile" style="width: 30px; height: 30px; border-radius: 50%;">
                     <span><?php echo htmlspecialchars($_SESSION['username'] ?? 'Admin'); ?></span>
                 </div>
             </div>

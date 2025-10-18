@@ -13,8 +13,9 @@ class NotificationService {
     
     /**
      * Create a new notification and send SMS immediately for fastest delivery
+     * Also queues email notifications for delivery via EmailJS
      */
-    public function createNotification($userId, $message, $type = 'general', $propertyId = null, $sendSMS = true) {
+    public function createNotification($userId, $message, $type = 'general', $propertyId = null, $sendSMS = true, $sendEmail = true) {
         try {
             // Insert notification into database
             $stmt = $this->pdo->prepare("
@@ -30,10 +31,95 @@ class NotificationService {
                 $this->sendNotificationSMS($userId, $message, $type, $notificationId);
             }
             
+            // Queue email notification for delivery via EmailJS
+            if ($sendEmail && $notificationId) {
+                $this->queueEmailNotification($userId, $message, $type, $notificationId, $propertyId);
+            }
+            
             return $notificationId;
             
         } catch (Exception $e) {
             error_log("Failed to create notification: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Queue email notification for EmailJS delivery
+     */
+    private function queueEmailNotification($userId, $message, $type, $notificationId, $propertyId = null) {
+        try {
+            // Get user details - simplified without email preference columns that don't exist
+            $stmt = $this->pdo->prepare("
+                SELECT u.email, u.username,
+                       p.property_name
+                FROM users u
+                LEFT JOIN property p ON p.id = ?
+                WHERE u.id = ?
+            ");
+            $stmt->execute([$propertyId, $userId]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($user && !empty($user['email'])) {
+                // Email notifications are enabled by default for all notification types
+                // System can be extended later to add preference columns if needed
+                
+                // Prepare email data for EmailJS
+                $emailData = [
+                    'to_email' => $user['email'],
+                    'to_name' => $user['username'],
+                    'subject' => $this->getEmailSubject($type),
+                    'message' => $message,
+                    'notification_type' => ucfirst(str_replace('_', ' ', $type)),
+                    'property_name' => $user['property_name'] ?? 'Not specified',
+                    'timestamp' => date('F j, Y g:i A')
+                ];
+                
+                // Store email in queue for EmailJS processing
+                return $this->storeEmailInQueue($notificationId, $userId, $emailData);
+            }
+            
+            return false;
+            
+        } catch (Exception $e) {
+            error_log("Failed to queue email notification: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Get email subject based on notification type
+     */
+    private function getEmailSubject($type) {
+        $subjects = [
+            'payment_received' => 'Payment Received Confirmation - Landlords&Tenants',
+            'booking_update' => 'Booking Status Update - Landlords&Tenants',
+            'system_alert' => 'Important System Alert - Landlords&Tenants',
+            'maintenance' => 'Maintenance Update - Landlords&Tenants',
+            'announcement' => 'New Announcement - Landlords&Tenants',
+            'message' => 'New Message Notification - Landlords&Tenants'
+        ];
+        
+        return $subjects[$type] ?? 'New Notification - Landlords&Tenants';
+    }
+    
+    /**
+     * Store email in queue for EmailJS processing
+     */
+    private function storeEmailInQueue($notificationId, $userId, $emailData) {
+        try {
+            $stmt = $this->pdo->prepare("
+                INSERT INTO email_queue (notification_id, user_id, email_data, created_at) 
+                VALUES (?, ?, ?, NOW())
+            ");
+            $success = $stmt->execute([
+                $notificationId, 
+                $userId, 
+                json_encode($emailData, JSON_UNESCAPED_UNICODE)
+            ]);
+            return $success;
+        } catch (PDOException $e) {
+            error_log("Email queue insertion error: " . $e->getMessage());
             return false;
         }
     }
@@ -132,9 +218,128 @@ class NotificationService {
     }
     
     /**
+     * Process pending notifications (both SMS and Email) for a user
+     */
+    public function processPendingNotificationsForUser($userId) {
+        $results = [
+            'sms' => ['processed' => 0, 'success' => 0, 'failed' => 0],
+            'email' => ['processed' => 0, 'queued' => 0, 'failed' => 0]
+        ];
+        
+        try {
+            // Get undelivered notifications for this specific user
+            $stmt = $this->pdo->prepare("
+                SELECT n.id, n.message, n.type, n.property_id,
+                       u.phone_number, u.email, u.username,
+                       p.property_name
+                FROM notifications n
+                LEFT JOIN users u ON n.user_id = u.id
+                LEFT JOIN property p ON n.property_id = p.id
+                WHERE n.user_id = ? 
+                AND n.delivered = 0
+                AND n.type IN ('booking_update', 'payment_received', 'announcement', 'maintenance', 'system_alert')
+                ORDER BY n.created_at ASC
+                LIMIT 10
+            ");
+            $stmt->execute([$userId]);
+            $undeliveredNotifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            foreach ($undeliveredNotifications as $notification) {
+                // Process SMS notification
+                if (!empty($notification['phone_number'])) {
+                    $smsSuccess = $this->sendNotificationSMS(
+                        $userId, 
+                        $notification['message'], 
+                        $notification['type'], 
+                        $notification['id']
+                    );
+                    
+                    $results['sms']['processed']++;
+                    if ($smsSuccess) {
+                        $results['sms']['success']++;
+                    } else {
+                        $results['sms']['failed']++;
+                    }
+                }
+                
+                // Process Email notification (queue for EmailJS)
+                if (!empty($notification['email'])) {
+                    $emailQueued = $this->queueEmailNotification(
+                        $userId,
+                        $notification['message'],
+                        $notification['type'],
+                        $notification['id'],
+                        $notification['property_id']
+                    );
+                    
+                    $results['email']['processed']++;
+                    if ($emailQueued) {
+                        $results['email']['queued']++;
+                    } else {
+                        $results['email']['failed']++;
+                    }
+                }
+            }
+            
+            return $results;
+            
+        } catch (Exception $e) {
+            error_log("Failed to process pending notifications for user: " . $e->getMessage());
+            return $results;
+        }
+    }
+    
+    /**
+     * Get pending emails for a user (for EmailJS processing)
+     */
+    public function getPendingEmails($userId) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT eq.id as queue_id, eq.notification_id, eq.email_data
+                FROM email_queue eq
+                WHERE eq.user_id = ? AND eq.sent = 0
+                ORDER BY eq.created_at ASC
+                LIMIT 10
+            ");
+            $stmt->execute([$userId]);
+            $pendingEmails = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $emails = [];
+            foreach ($pendingEmails as $email) {
+                $emailData = json_decode($email['email_data'], true);
+                $emailData['queue_id'] = $email['queue_id'];
+                $emailData['notification_id'] = $email['notification_id'];
+                $emails[] = $emailData;
+            }
+            
+            return $emails;
+        } catch (PDOException $e) {
+            error_log("Get pending emails error: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Mark email as sent in the queue
+     */
+    public function markEmailAsSent($queueId) {
+        try {
+            $stmt = $this->pdo->prepare("
+                UPDATE email_queue 
+                SET sent = 1, sent_at = NOW() 
+                WHERE id = ?
+            ");
+            return $stmt->execute([$queueId]);
+        } catch (PDOException $e) {
+            error_log("Mark email as sent error: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
      * Send booking update notification
      */
-    public function sendBookingNotification($userId, $bookingId, $status, $propertyName, $roomNumber = null) {
+    public function sendBookingNotification($userId, $bookingId, $status, $propertyName, $roomNumber = null, $sendEmail = true) {
         $statusMessages = [
             'confirmed' => "Your booking for $propertyName" . ($roomNumber ? " - Room $roomNumber" : "") . " has been confirmed!",
             'rejected' => "Your booking for $propertyName" . ($roomNumber ? " - Room $roomNumber" : "") . " has been rejected.",
@@ -144,13 +349,13 @@ class NotificationService {
         
         $message = $statusMessages[$status] ?? "Your booking status has been updated to: $status";
         
-        return $this->createNotification($userId, $message, 'booking_update', null, true);
+        return $this->createNotification($userId, $message, 'booking_update', null, true, $sendEmail);
     }
     
     /**
      * Send payment notification
      */
-    public function sendPaymentNotification($userId, $amount, $status, $propertyName) {
+    public function sendPaymentNotification($userId, $amount, $status, $propertyName, $sendEmail = true) {
         $statusMessages = [
             'completed' => "Payment of GHS " . number_format($amount, 2) . " for $propertyName has been completed successfully.",
             'failed' => "Payment of GHS " . number_format($amount, 2) . " for $propertyName has failed. Please try again.",
@@ -159,13 +364,13 @@ class NotificationService {
         
         $message = $statusMessages[$status] ?? "Payment status updated: $status";
         
-        return $this->createNotification($userId, $message, 'payment_received', null, true);
+        return $this->createNotification($userId, $message, 'payment_received', null, true, $sendEmail);
     }
     
     /**
      * Send maintenance notification
      */
-    public function sendMaintenanceNotification($userId, $title, $status, $propertyName) {
+    public function sendMaintenanceNotification($userId, $title, $status, $propertyName, $sendEmail = true) {
         $statusMessages = [
             'pending' => "Your maintenance request '$title' at $propertyName has been submitted and is pending review.",
             'in_progress' => "Your maintenance request '$title' at $propertyName is now in progress.",
@@ -175,26 +380,26 @@ class NotificationService {
         
         $message = $statusMessages[$status] ?? "Maintenance request '$title' status updated: $status";
         
-        return $this->createNotification($userId, $message, 'maintenance', null, true);
+        return $this->createNotification($userId, $message, 'maintenance', null, true, $sendEmail);
     }
     
     /**
      * Send announcement notification
      */
-    public function sendAnnouncementNotification($userId, $title, $content) {
+    public function sendAnnouncementNotification($userId, $title, $content, $sendEmail = true) {
         $message = "New Announcement: $title - " . substr(strip_tags($content), 0, 100) . "...";
         
-        return $this->createNotification($userId, $message, 'announcement', null, true);
+        return $this->createNotification($userId, $message, 'announcement', null, true, $sendEmail);
     }
     
     /**
      * Send bulk notifications to multiple users
      */
-    public function sendBulkNotifications($userIds, $message, $type = 'general', $propertyId = null, $sendSMS = true) {
+    public function sendBulkNotifications($userIds, $message, $type = 'general', $propertyId = null, $sendSMS = true, $sendEmail = true) {
         $results = [];
         
         foreach ($userIds as $userId) {
-            $notificationId = $this->createNotification($userId, $message, $type, $propertyId, $sendSMS);
+            $notificationId = $this->createNotification($userId, $message, $type, $propertyId, $sendSMS, $sendEmail);
             $results[] = [
                 'user_id' => $userId,
                 'notification_id' => $notificationId,
@@ -379,6 +584,24 @@ class NotificationService {
             
         } catch (Exception $e) {
             error_log("Failed to delete old notifications: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Clean up old email queue entries
+     */
+    public function cleanupEmailQueue($daysOld = 30) {
+        try {
+            $stmt = $this->pdo->prepare("
+                DELETE FROM email_queue 
+                WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+            ");
+            
+            return $stmt->execute([$daysOld]);
+            
+        } catch (Exception $e) {
+            error_log("Failed to cleanup email queue: " . $e->getMessage());
             return false;
         }
     }

@@ -16,6 +16,47 @@ require_once __DIR__. '../../../config/database.php';
 $database = new Database();
 $pdo = $database->connect();
 
+
+/// Get user data from session and database
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'] ?? 'Admin';
+$email = $_SESSION['email'] ?? '';
+$avatar = $_SESSION['avatar'] ?? 'https://randomuser.me/api/portraits/men/32.jpg';
+$status = $_SESSION['status'] ?? 'admin';
+
+// Fetch additional user details from database
+try {
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$user) {
+        throw new Exception("User not found");
+    }
+    
+} catch (PDOException $e) {
+    error_log("Database Error: " . $e->getMessage());
+    $error = "Failed to load user data. Please try again later.";
+} catch (Exception $e) {
+    error_log("Error: " . $e->getMessage());
+    $error = $e->getMessage();
+}
+
+// Get profile picture path
+function getProfilePicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    }
+    
+    return '../../' . ltrim($path, '/');
+}
+
+$profile_pic_path = getProfilePicturePath($user['profile_picture'] ?? '');
+
 // Get current page (financial, occupancy, or export)
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 
@@ -622,12 +663,11 @@ if ($currentPage === 'export' && isset($_GET['export'])) {
                     <li><a href="../dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
                     <li><a href="../users/"><i class="fas fa-users"></i> User Management</a></li>
                     <li><a href="../properties/"><i class="fas fa-home"></i> Property Management</a></li>
-                    <li><a href="../bookings/"><i class="fas fa-calendar-check"></i> Booking Management</a></li>
                     <li><a href="../payments/"><i class="fas fa-money-bill-wave"></i> Payments</a></li>
                     <li><a href="financial.php" class="<?php echo $currentPage === 'financial' ? 'active' : ''; ?>"><i class="fas fa-chart-line"></i> Financial Reports</a></li>
                     <li><a href="occupancy.php" class="<?php echo $currentPage === 'occupancy' ? 'active' : ''; ?>"><i class="fas fa-bed"></i> Occupancy Reports</a></li>
                     <li><a href="export.php" class="<?php echo $currentPage === 'export' ? 'active' : ''; ?>"><i class="fas fa-file-export"></i> Data Exports</a></li>
-                    <li><a href="../settings/"><i class="fas fa-cog"></i> Settings</a></li>
+                    <li><a href="../profile/"><i class="fas fa-cog"></i> Settings</a></li>
                     <li>
                         <form action="../logout.php" method="POST">
                           <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
@@ -648,7 +688,7 @@ if ($currentPage === 'export' && isset($_GET['export'])) {
                     <i class="fas fa-bars"></i>
                 </button>
                 <div class="user-profile">
-                    <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="User Profile" style="width: 30px; height: 30px; border-radius: 50%;">
+                    <img src="<?= htmlspecialchars($profile_pic_path)?>" style="width: 30px; height: 30px; border-radius: 50%;">
                     <span><?php echo htmlspecialchars($_SESSION['username'] ?? 'Admin'); ?></span>
                 </div>
             </div>

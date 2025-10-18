@@ -62,11 +62,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         
         $update_stmt = $pdo->prepare("UPDATE users SET 
                                     email = ?, 
-                                    phone_number = ?, 
-                                    location = ?, 
+                                    phone_number = ?,
                                     payment_method = ? 
                                     WHERE id = ?");
-        $update_stmt->execute([$email, $phone_number, $location, $payment_method, $owner_id]);
+        $update_stmt->execute([$email, $phone_number, $payment_method, $owner_id]);
         
         // Update session data
         $_SESSION['email'] = $email;
@@ -736,8 +735,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_notifications'
     <!-- Header -->
     <header class="main-header">
         <div class="header-container">
-            <a href="../../" class="logo">
-                <img src="../assets/images/landlords-logo.png" alt="UniHomes Logo">
+            <a href="dashboard.php" class="logo">
+                <img src="../assets/images/landlords-logo.png" alt="Landlords$Tenant Logo">
                 <span>Landlords&Tenant</span>
             </a>
             
@@ -880,7 +879,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_notifications'
                                     <div class="col-md-6">
                                         <div class="form-group">
                                             <label for="location" class="form-label">Location</label>
-                                            <input type="text" class="form-control" id="location" name="location" value="<?= htmlspecialchars($user['location']) ?>" required>
+                                            <input type="text" class="form-control" id="location" name="location" value="<?= htmlspecialchars($user['location']) ?>" disabled>
                                         </div>
                                     </div>
                                 </div>

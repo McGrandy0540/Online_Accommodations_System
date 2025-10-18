@@ -24,6 +24,38 @@ $success = '';
 
 // Fetch user data
 try {
+    $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$user) {
+        $_SESSION['error'] = "User not found";
+        header("Location: index.php");
+        exit();
+    }
+} catch (PDOException $e) {
+    $_SESSION['error'] = "Database error: " . $e->getMessage();
+    header("Location: index.php");
+    exit();
+}
+
+// Get profile picture path
+function getProfilePicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    }
+    
+    return '../../../' . ltrim($path, '/');
+}
+
+$profile_pic_path = getProfilePicturePath($user['profile_picture'] ?? '');
+
+// Fetch user data
+try {
     $stmt = $db->prepare("SELECT * FROM users WHERE id = ? AND deleted = 0");
     $stmt->execute([$userId]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -38,6 +70,9 @@ try {
     header("Location: index.php");
     exit();
 }
+
+// Get current profile picture path
+$currentProfilePic = getProfilePicturePath($user['profile_picture'] ?? '');
 
 // Pre-calculate user initial for avatar fallback
 $userInitial = strtoupper(substr($user['username'], 0, 1));
@@ -59,19 +94,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 
     // Handle file upload
-    if (!empty($_FILES['profile_picture']['name'])) {
+    if (!empty($_FILES['profile_picture']['name']) && $_FILES['profile_picture']['error'] === UPLOAD_ERR_OK) {
         $uploadDir = __DIR__ . '/../../uploads/profiles/';
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0755, true);
         }
 
-        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         $fileInfo = finfo_open(FILEINFO_MIME_TYPE);
         $detectedType = finfo_file($fileInfo, $_FILES['profile_picture']['tmp_name']);
         finfo_close($fileInfo);
 
         if (!in_array($detectedType, $allowedTypes)) {
-            $errors[] = 'Invalid file type. Only JPG, PNG, and GIF are allowed.';
+            $errors[] = 'Invalid file type. Only JPG, PNG, GIF, and WEBP are allowed.';
         } elseif ($_FILES['profile_picture']['size'] > 2 * 1024 * 1024) {
             $errors[] = 'File size must be less than 2MB.';
         } else {
@@ -80,8 +115,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $destination = $uploadDir . $filename;
 
             if (move_uploaded_file($_FILES['profile_picture']['tmp_name'], $destination)) {
-                // Delete old profile picture if it exists
-                if (!empty($user['profile_picture']) && file_exists(__DIR__ . '/../../' . $user['profile_picture'])) {
+                // Delete old profile picture if it exists and is not the default
+                if (!empty($user['profile_picture']) && 
+                    file_exists(__DIR__ . '/../../' . $user['profile_picture']) &&
+                    !str_contains($user['profile_picture'], 'default')) {
                     unlink(__DIR__ . '/../../' . $user['profile_picture']);
                 }
                 $userData['profile_picture'] = 'uploads/profiles/' . $filename;
@@ -102,6 +139,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             foreach ($userData as $field => $value) {
                 if ($field === 'pwd' && !empty($value)) {
+                    if (strlen($value) < 8) {
+                        $errors[] = 'Password must be at least 8 characters long.';
+                        $db->rollBack();
+                        break;
+                    }
                     $updateFields[] = "pwd = ?";
                     $updateValues[] = password_hash($value, PASSWORD_DEFAULT);
                 } elseif ($field !== 'pwd') {
@@ -115,21 +157,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 unset($userData['pwd']);
             }
             
-            $updateValues[] = $userId;
-            
-            $query = "UPDATE users SET " . implode(', ', $updateFields) . " WHERE id = ?";
-            $stmt = $db->prepare($query);
-            $stmt->execute($updateValues);
-            
-            $db->commit();
-            
-            $success = 'User updated successfully!';
-            
-            // Refresh user data
-            $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
-            $stmt->execute([$userId]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
-            $userInitial = strtoupper(substr($user['username'], 0, 1));
+            if (empty($errors)) {
+                $updateValues[] = $userId;
+                
+                $query = "UPDATE users SET " . implode(', ', $updateFields) . ", updated_at = NOW() WHERE id = ?";
+                $stmt = $db->prepare($query);
+                $stmt->execute($updateValues);
+                
+                $db->commit();
+                
+                $success = 'User updated successfully!';
+                
+                // Refresh user data
+                $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+                $stmt->execute([$userId]);
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                $userInitial = strtoupper(substr($user['username'], 0, 1));
+                $currentProfilePic = getProfilePicturePath($user['profile_picture'] ?? '');
+            }
         } catch (PDOException $e) {
             $db->rollBack();
             $errors[] = 'Database error: ' . $e->getMessage();
@@ -475,6 +520,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin-bottom: 1rem;
         }
 
+        .hidden {
+            display: none !important;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 1rem;
@@ -534,15 +583,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <form method="POST" action="edit.php?id=<?php echo $userId; ?>" enctype="multipart/form-data">
                 <div class="profile-picture-container">
-                    <?php if (!empty($user['profile_picture'])): ?>
-                        <img src="<?php echo htmlspecialchars($user['profile_picture']); ?>"
+                    <?php if (!empty($profile_pic_path)): ?>
+                        <img src="<?php echo htmlspecialchars($profile_pic_path); ?>"
                         alt="Profile Picture"
                         class="profile-picture"
-                        data-initial="<?php echo htmlspecialchars($userInitial); ?>">
+                        onerror="this.onerror=null; this.classList.add('hidden'); document.getElementById('avatar-initials').classList.remove('hidden');">
+                        <div id="avatar-initials" class="avatar-initials hidden"><?php echo $userInitial; ?></div>
                     <?php else: ?>
-                        <div class="avatar-initials">
-                            <?php echo $userInitial; ?>
-                        </div>
+                        <div class="avatar-initials"><?php echo $userInitial; ?></div>
                     <?php endif; ?>
                     
                     <div class="profile-picture-upload">
@@ -551,6 +599,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </label>
                         <input type="file" id="profile_picture" name="profile_picture" accept="image/*">
                         <div class="profile-picture-filename" id="file-name">No file chosen</div>
+                        <span class="text-muted">
+                            <i class="fas fa-info-circle"></i> JPG, PNG, GIF, WEBP up to 2MB
+                        </span>
                     </div>
                 </div>
                 
@@ -692,14 +743,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
         
         // Handle image loading errors
-        document.querySelectorAll('.profile-picture').forEach(img => {
-            img.addEventListener('error', function() {
-                const initial = this.getAttribute('data-initial');
-                const avatarDiv = document.createElement('div');
-                avatarDiv.className = 'avatar-initials';
-                avatarDiv.textContent = initial;
-                this.parentNode.replaceChild(avatarDiv, this);
-            });
+        document.addEventListener('DOMContentLoaded', function() {
+            const avatar = document.querySelector('.profile-picture');
+            if (avatar) {
+                avatar.onerror = function() {
+                    this.classList.add('hidden');
+                    const initials = document.getElementById('avatar-initials');
+                    if (initials) {
+                        initials.classList.remove('hidden');
+                    }
+                };
+            }
         });
     </script>
 </body>

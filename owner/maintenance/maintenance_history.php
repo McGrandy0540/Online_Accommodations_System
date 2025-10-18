@@ -31,12 +31,12 @@ function getProfilePicturePath($path) {
         return $path;
     }
     
-    return '../' . ltrim($path, '/');
+    return '../../../' . ltrim($path, '/');
 }
 $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
 
 // Get maintenance history with filters
-$where = "WHERE po.owner_id = ?";
+$where = "WHERE p.owner_id = ?";
 $params = [$owner_id];
 $status_filter = $_GET['status'] ?? '';
 $priority_filter = $_GET['priority'] ?? '';
@@ -69,24 +69,55 @@ if ($date_to) {
     $params[] = $date_to;
 }
 
+// Pagination setup
+$per_page = 10;
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$offset = ($page - 1) * $per_page;
+
+// Get total count for pagination
+$count_query = "SELECT COUNT(*) FROM maintenance_requests mr
+                JOIN property p ON mr.property_id = p.id
+                $where";
+$count_stmt = $pdo->prepare($count_query);
+$count_stmt->execute($params);
+$total_items = $count_stmt->fetchColumn();
+$total_pages = ceil($total_items / $per_page);
+
+// Main query with pagination
 $query = "SELECT mr.*, p.property_name, p.id as property_id, 
-          u.username as student_name, u.profile_picture as student_photo
+          u.username as student_name, u.profile_picture as student_photo,
+          pr.room_number
           FROM maintenance_requests mr
           JOIN property p ON mr.property_id = p.id
-          JOIN property_owners po ON p.id = po.property_id
           JOIN users u ON mr.user_id = u.id
+          LEFT JOIN property_rooms pr ON mr.room_id = pr.id
           $where
-          ORDER BY mr.created_at DESC";
+          ORDER BY mr.created_at DESC
+          LIMIT $offset, $per_page";
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $history = $stmt->fetchAll();
 
+// Get profile picture path
+function getTenantPicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    } 
+    
+    return '../../../' . ltrim($path, '/');
+}
+
+$profile_pic_paths = getTenantPicturePath($history['profile_picture'] ?? '');
+
 // Get properties for filter dropdown
 $properties = $pdo->prepare("SELECT p.id, p.property_name 
                             FROM property p
-                            JOIN property_owners po ON p.id = po.property_id
-                            WHERE po.owner_id = ? AND p.deleted = 0");
+                            WHERE p.owner_id = ? AND p.deleted = 0");
 $properties->execute([$owner_id]);
 $property_options = $properties->fetchAll();
 
@@ -96,13 +127,33 @@ $messages = $pdo->prepare("SELECT COUNT(*) FROM chat_messages cm
                           WHERE (cc.owner_id = ? AND cm.sender_id != ?) AND cm.is_read = 0");
 $messages->execute([$owner_id, $owner_id]);
 $unread_messages = $messages->fetchColumn();
+
+// Get statistics for dashboard
+$stats_query = "SELECT 
+    COUNT(*) as total_requests,
+    SUM(CASE WHEN mr.status = 'pending' THEN 1 ELSE 0 END) as pending_requests,
+    SUM(CASE WHEN mr.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_requests,
+    SUM(CASE WHEN mr.status = 'completed' THEN 1 ELSE 0 END) as completed_requests,
+    SUM(CASE WHEN mr.priority = 'emergency' THEN 1 ELSE 0 END) as emergency_requests
+    FROM maintenance_requests mr
+    JOIN property p ON mr.property_id = p.id
+    WHERE p.owner_id = ?";
+
+$stats_stmt = $pdo->prepare($stats_query);
+$stats_stmt->execute([$owner_id]);
+$stats = $stats_stmt->fetch();
+
+// Preserve filter parameters in pagination
+$query_params = $_GET;
+unset($query_params['page']);
+$query_string = $query_params ? '&' . http_build_query($query_params) : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Maintenance History | UniHomes</title>
+    <title>Maintenance History | Landlords&Tenant</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -412,6 +463,45 @@ $unread_messages = $messages->fetchColumn();
             font-weight: bold;
         }
 
+        /* Statistics Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-number {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--secondary-color);
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .stat-card.total .stat-icon { color: var(--primary-color); }
+        .stat-card.pending .stat-icon { color: var(--warning-color); }
+        .stat-card.progressing .stat-icon { color: var(--info-color); }
+        .stat-card.completed .stat-icon { color: var(--success-color); }
+        .stat-card.emergency .stat-icon { color: var(--accent-color); }
+
         /* Filter Section */
         .filter-section {
             background-color: white;
@@ -631,6 +721,12 @@ $unread_messages = $messages->fetchColumn();
             margin-right: 0.25rem;
         }
 
+        .room-info {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
+
         /* Pagination */
         .pagination {
             display: flex;
@@ -666,6 +762,13 @@ $unread_messages = $messages->fetchColumn();
             background-color: var(--primary-color);
             color: white;
             border-color: var(--primary-color);
+        }
+
+        .page-item.disabled .page-link {
+            background-color: #f8f9fa;
+            color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
         }
 
         /* Empty State */
@@ -728,6 +831,10 @@ $unread_messages = $messages->fetchColumn();
             th, td {
                 padding: 0.75rem;
             }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
 
         @media (max-width: 576px) {
@@ -755,6 +862,10 @@ $unread_messages = $messages->fetchColumn();
                 display: block;
                 margin-bottom: 0.5rem;
             }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -763,8 +874,8 @@ $unread_messages = $messages->fetchColumn();
     <header class="main-header">
         <div class="header-container">
             <a href="../" class="logo">
-                <img src="../../assets/images/ktu logo.png" alt="UniHomes Logo">
-                <span>UniHomes</span>
+                <img src="../../assets/images/landlords-logo.png" alt="Landlords&Tenant Logo">
+                <span>Landlords&Tenant</span>
             </a>
             
             <div class="user-controls">
@@ -780,16 +891,17 @@ $unread_messages = $messages->fetchColumn();
                         <span class="d-none d-md-inline"><?= htmlspecialchars($owner['username']) ?></span>
                     </div>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="../owner/profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
-                        <li><a class="dropdown-item" href="../owner/settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                        <li><a class="dropdown-item" href="../settings.php"><i class="fas fa-user me-2"></i>Profile</a></li>
+                        <li><a class="dropdown-item" href="../settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <form action="../auth/logout.php" method="POST">
+                       <li>
+                            <form action="logout.php" method="POST">
+                                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                                 <button type="submit" class="dropdown-item">
-                                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                                  <i class="fas fa-sign-out-alt "></i> Logout
                                 </button>
                             </form>
-                        </li>
+                      </li>
                     </ul>
                 </div>
                 <button class="menu-toggle" id="menuToggle">
@@ -816,9 +928,10 @@ $unread_messages = $messages->fetchColumn();
                     <li><a href="../payments/"><i class="fas fa-wallet"></i> <span class="menu-text">Payments</span></a></li>
                     <li><a href="../reviews/"><i class="fas fa-star"></i> <span class="menu-text">Reviews</span></a></li>
                     <li><a href="../chat/"><i class="fas fa-comments"></i> <span class="menu-text">Messages</span></a></li>
-                    <li><a href="../maintenance/" class="active"><i class="fas fa-tools"></i> <span class="menu-text">Maintenance</span></a></li>
+                    <li><a href="../maintenance/"><i class="fas fa-tools"></i> <span class="menu-text">Maintenance</span></a></li>
                     <li><a href="../virtual-tours/"><i class="fas fa-video"></i> <span class="menu-text">Virtual Tours</span></a></li>
                     <li><a href="../settings.php"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
+                    <li><a href="maintenance_history.php" class="active"><i class="fa-solid fa-clock-rotate-left"></i> <span class="menu-text">Maintenance History</span></a></li>
                 </ul>
             </div>
         </div>
@@ -832,6 +945,45 @@ $unread_messages = $messages->fetchColumn();
                         <i class="fas fa-bell"></i>
                         <span class="badge"><?= $unread_messages ?></span>
                     </button>
+                </div>
+
+                <!-- Statistics Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card total">
+                        <div class="stat-icon">
+                            <i class="fas fa-tools"></i>
+                        </div>
+                        <div class="stat-number"><?= $stats['total_requests'] ?? 0 ?></div>
+                        <div class="stat-label">Total Requests</div>
+                    </div>
+                    <div class="stat-card pending">
+                        <div class="stat-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-number"><?= $stats['pending_requests'] ?? 0 ?></div>
+                        <div class="stat-label">Pending</div>
+                    </div>
+                    <div class="stat-card progressing">
+                        <div class="stat-icon">
+                            <i class="fas fa-spinner"></i>  
+                        </div>
+                        <div class="stat-number"><?= $stats['in_progress_requests'] ?? 0 ?></div>
+                        <div class="stat-label">In Progress</div>
+                    </div>
+                    <div class="stat-card completed">
+                        <div class="stat-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-number"><?= $stats['completed_requests'] ?? 0 ?></div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat-card emergency">
+                        <div class="stat-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="stat-number"><?= $stats['emergency_requests'] ?? 0 ?></div>
+                        <div class="stat-label">Emergency</div>
+                    </div>
                 </div>
 
                 <div class="filter-section">
@@ -898,6 +1050,9 @@ $unread_messages = $messages->fetchColumn();
                             <i class="fas fa-tools"></i>
                             <h3>No Maintenance History Found</h3>
                             <p>No maintenance requests match your current filters.</p>
+                            <a href="../maintenance/" class="btn btn-primary mt-3">
+                                <i class="fas fa-arrow-left me-2"></i>Back to Maintenance
+                            </a>
                         </div>
                     <?php else: ?>
                         <div class="table-responsive">
@@ -922,11 +1077,18 @@ $unread_messages = $messages->fetchColumn();
                                         ?>
                                         <tr>
                                             <td>#<?= $request['id'] ?></td>
-                                            <td><?= htmlspecialchars($request['property_name']) ?></td>
                                             <td>
-                                                <?php if (!empty($request['student_photo'])): ?>
-                                                    <?php $student_photo = getProfilePicturePath($request['student_photo']); ?>
-                                                    <img src="<?= htmlspecialchars($student_photo) ?>" class="user-avatar" alt="Student Photo">
+                                                <?= htmlspecialchars($request['property_name']) ?>
+                                                <?php if (!empty($request['room_number'])): ?>
+                                                    <div class="room-info">
+                                                        <i class="fas fa-door-open"></i> Room <?= htmlspecialchars($request['room_number']) ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <?php if (!empty($profile_pic_paths)): ?>
+                                                    
+                                                    <img src="<?= htmlspecialchars($profile_pic_paths) ?>" class="user-avatar" alt="Student Photo">
                                                 <?php else: ?>
                                                     <div class="user-avatar-placeholder">
                                                         <?= substr($request['student_name'], 0, 1) ?>
@@ -947,14 +1109,9 @@ $unread_messages = $messages->fetchColumn();
                                             </td>
                                             <td><?= date('M j, Y', strtotime($request['created_at'])) ?></td>
                                             <td>
-                                                <a href="index.php?view=<?= $request['id'] ?>" class="action-link" title="View Details">
+                                                <a href="../maintenance/index.php?request_id=<?= $request['id'] ?>" class="action-link" title="View Details">
                                                     <i class="fas fa-eye"></i> View
                                                 </a>
-                                                <?php if ($request['status'] !== 'completed'): ?>
-                                                    <a href="submit.php?request_id=<?= $request['id'] ?>&property_id=<?= $request['property_id'] ?>" class="action-link" title="Create Virtual Tour">
-                                                        <i class="fas fa-video"></i> Tour
-                                                    </a>
-                                                <?php endif; ?>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -962,27 +1119,35 @@ $unread_messages = $messages->fetchColumn();
                             </table>
                         </div>
                         
+                        <!-- Working Pagination -->
+                        <?php if ($total_pages > 1): ?>
                         <div class="pagination">
-                            <div class="page-item">
-                                <a href="#" class="page-link">
+                            <!-- Previous Page -->
+                            <div class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                                <a href="?page=<?= $page - 1 ?><?= $query_string ?>" class="page-link">
                                     <i class="fas fa-chevron-left"></i>
                                 </a>
                             </div>
-                            <div class="page-item active">
-                                <a href="#" class="page-link">1</a>
-                            </div>
-                            <div class="page-item">
-                                <a href="#" class="page-link">2</a>
-                            </div>
-                            <div class="page-item">
-                                <a href="#" class="page-link">3</a>
-                            </div>
-                            <div class="page-item">
-                                <a href="#" class="page-link">
+                            
+                            <!-- Page Numbers -->
+                            <?php 
+                            $start_page = max(1, $page - 2);
+                            $end_page = min($total_pages, $page + 2);
+                            
+                            for ($i = $start_page; $i <= $end_page; $i++): ?>
+                                <div class="page-item <?= $i == $page ? 'active' : '' ?>">
+                                    <a href="?page=<?= $i ?><?= $query_string ?>" class="page-link"><?= $i ?></a>
+                                </div>
+                            <?php endfor; ?>
+                            
+                            <!-- Next Page -->
+                            <div class="page-item <?= $page >= $total_pages ? 'disabled' : '' ?>">
+                                <a href="?page=<?= $page + 1 ?><?= $query_string ?>" class="page-link">
                                     <i class="fas fa-chevron-right"></i>
                                 </a>
                             </div>
                         </div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -1016,7 +1181,7 @@ $unread_messages = $messages->fetchColumn();
 
         // Simple notification bell interaction
         document.querySelector('.notification-bell').addEventListener('click', function() {
-            window.location.href = '../chat/index.php';
+            window.location.href = '../notification/';
         });
 
         // Resize handler
@@ -1025,6 +1190,19 @@ $unread_messages = $messages->fetchColumn();
             if (window.innerWidth > 992) {
                 sidebar.classList.remove('active');
             }
+        });
+
+        // Auto-submit form when filters change (optional)
+        document.getElementById('status').addEventListener('change', function() {
+            this.form.submit();
+        });
+
+        document.getElementById('priority').addEventListener('change', function() {
+            this.form.submit();
+        });
+
+        document.getElementById('property').addEventListener('change', function() {
+            this.form.submit();
         });
     </script>
 </body>

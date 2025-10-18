@@ -23,10 +23,45 @@ require_once '../config/database.php';
 $database = new Database();
 $pdo = $database->connect();
 
-// Get user data from session
+/// Get user data from session and database
+$user_id = $_SESSION['user_id'];
 $username = $_SESSION['username'] ?? 'Admin';
-$email = $_SESSION['email'] ?? 'admin@example.com';
+$email = $_SESSION['email'] ?? '';
 $avatar = $_SESSION['avatar'] ?? 'https://randomuser.me/api/portraits/men/32.jpg';
+$status = $_SESSION['status'] ?? 'admin';
+
+// Fetch additional user details from database
+try {
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$user) {
+        throw new Exception("User not found");
+    }
+    
+} catch (PDOException $e) {
+    error_log("Database Error: " . $e->getMessage());
+    $error = "Failed to load user data. Please try again later.";
+} catch (Exception $e) {
+    error_log("Error: " . $e->getMessage());
+    $error = $e->getMessage();
+}
+
+// Get profile picture path
+function getProfilePicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    }
+    
+    return '../' . ltrim($path, '/');
+}
+
+$profile_pic_path = getProfilePicturePath($user['profile_picture'] ?? '');
 
 // Function to get counts from database
 function getCount($pdo, $table, $where = "") {
@@ -266,7 +301,7 @@ try {
                 <?php if (isset($_SESSION['user_id'])): ?>
                     <div class="user-dropdown">
                         <a href="profile/" class="user-profile">
-                            <img src="<?php echo htmlspecialchars($avatar); ?>" alt="User Profile" style="width: 30px; height: 30px; border-radius: 50%;">
+                            <img src="<?php echo htmlspecialchars($profile_pic_path); ?>" alt="User Profile" style="width: 30px; height: 30px; border-radius: 50%;">
                             <span><?php echo htmlspecialchars($username); ?></span>
                         </a>
                     </div>
@@ -295,7 +330,7 @@ try {
                     <li><a href="reports/"><i class="fas fa-file-invoice-dollar"></i> Financial Reports</a></li>
                     <li><a href="approvals/"><i class="fas fa-calendar-alt"></i> Booking Approvals</a></li>
                     <li><a href="announcement.php"><i class="fa-solid fa-bullhorn"></i></i> Announcement </a></li>
-                    <li><a href="sms/"><i class="fas fa-sms"></i> Notifications</a></li>
+                    <li><a href="notifications/"><i class="fas fa-sms"></i> Notifications</a></li>
                     <li><a href="verified_property_owner_document.php"><i class="fas fa-check-circle"></i> Verified Property Owners</a></li>
                     <li><a href="verified_tenant_document.php"><i class="fa fa-check-circle"></i> Verified Tenant</a></li>
                 </ul>
@@ -319,7 +354,7 @@ try {
                     <i class="fas fa-bars"></i>
                 </div>
                 <div class="user-profile">
-                    <img src="<?php echo htmlspecialchars($avatar); ?>" alt="User Profile">
+                    <img src="<?php echo htmlspecialchars($profile_pic_path); ?>" alt="User Profile">
                     <span><?php echo htmlspecialchars($username); ?> <span class="admin-badge">ADMIN</span></span>
                 </div>
             </div>
@@ -346,7 +381,7 @@ try {
                     </div>
                     <div class="stat-card success">
                         <i class="fas fa-users"></i>
-                        <h3>Registered Students</h3>
+                        <h3>Registered Tenants</h3>
                         <h2><?php echo number_format($totalStudents); ?></h2>
                         <p><?php echo rand(3, 10); ?>% from last month</p>
                     </div>
@@ -379,7 +414,7 @@ try {
                                     <thead>
                                         <tr>
                                             <th>ID</th>
-                                            <th>Student</th>
+                                            <th>Tenant</th>
                                             <th>Property</th>
                                             <th>Dates</th>
                                             <th>Actions</th>
@@ -509,7 +544,7 @@ try {
         <div class="footer-content">
             <div class="footer-column">
                 <h3>About Landlords&Tenants</h3>
-                <p>Providing quality accommodation solutions for Tenants since 2010. Our mission is to make Tenant living comfortable and affordable.</p>
+                <p>Providing quality accommodation solutions for Tenants since 2023. Our mission is to make Tenant living comfortable and affordable.</p>
             </div>
             
             <div class="footer-column">
@@ -537,7 +572,7 @@ try {
                 <ul>
                     <li><i class="fas fa-map-marker-alt"></i> 123 University Ave, Campus Town</li>
                     <li><i class="fas fa-phone"></i> +233 240 687 599</li>
-                    <li><i class="fas fa-envelope"></i> info@landlords&tenant.com</li>
+                    <li><i class="fas fa-envelope"></i> godwinaboade5432109876@gmail.com</li>
                 </ul>
                 <div class="social-links" style="margin-top: 10px;">
                     <a href="#" style="color: white; margin-right: 10px;"><i class="fab fa-facebook-f"></i></a>

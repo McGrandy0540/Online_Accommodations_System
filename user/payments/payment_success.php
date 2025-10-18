@@ -444,7 +444,7 @@ ob_end_flush();
                         </div>
                         <div class="info-item">
                             <p class="text-sm text-gray-500">Monthly Rate</p>
-                            <p class="font-medium">GHS <?= number_format($booking['price'], 2) ?></p>
+                            <p class="font-medium">GHS <?= number_format($booking['price'] / 12, 2) ?></p>
                         </div>
                     </div>
                 </div>

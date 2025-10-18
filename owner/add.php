@@ -802,19 +802,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <label for="features" class="form-label">Features & Amenities</label>
                                 <select class="form-control select2-multiple" id="features" name="features[]" multiple="multiple">
                                     <option value="WiFi">WiFi</option>
-                                    <option value="Air Conditioning">Air Conditioning</option>
-                                    <option value="Heating">Heating</option>
+                                    <option value="Air Conditioning">Air Condition</option>
                                     <option value="Kitchen">Kitchen</option>
-                                    <option value="Washer">Washer</option>
-                                    <option value="Dryer">Dryer</option>
+                                    <option value="Washer">Washing Machine</option>
+                                    <option value="Dryer">Dry line</option>
                                     <option value="TV">TV</option>
                                     <option value="Swimming Pool">Swimming Pool</option>
                                     <option value="Gym">Gym</option>
-                                    <option value="Parking">Parking</option>
+                                    <option value="Parking">Car Pack</option>
                                     <option value="Security">Security</option>
                                     <option value="Furnished">Furnished</option>
-                                    <option value="Pet Friendly">Pet Friendly</option>
-                                    <option value="Wheelchair Accessible">Wheelchair Accessible</option>
+                                    <option value="Wheelchair Accessible">Wheelchair Accessibility</option>
                                     <?php foreach ($room_types as $type): ?>
                                         <option value="Room Type:<?= htmlspecialchars(str_replace('Room Type:', '', $type['feature_name'])) ?>">
                                             <?= htmlspecialchars(str_replace('Room Type:', '', $type['feature_name'])) ?>
@@ -869,7 +867,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                             <option value="Desk">Desk</option>
                                             <option value="Wardrobe">Wardrobe</option>
                                             <option value="Balcony">Balcony</option>
-                                            <option value="View">View</option>
+                                            
                                         </select>
                                     </div>
                                     <div class="mt-3">

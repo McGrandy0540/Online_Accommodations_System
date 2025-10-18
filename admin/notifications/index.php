@@ -9,6 +9,47 @@ require_once __DIR__ . '../../../config/database.php';
 $database = new Database();
 $pdo = $database->connect();
 
+
+/// Get user data from session and database
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'] ?? 'Admin';
+$email = $_SESSION['email'] ?? '';
+$avatar = $_SESSION['avatar'] ?? 'https://randomuser.me/api/portraits/men/32.jpg';
+$status = $_SESSION['status'] ?? 'admin';
+
+// Fetch additional user details from database
+try {
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$user) {
+        throw new Exception("User not found");
+    }
+    
+} catch (PDOException $e) {
+    error_log("Database Error: " . $e->getMessage());
+    $error = "Failed to load user data. Please try again later.";
+} catch (Exception $e) {
+    error_log("Error: " . $e->getMessage());
+    $error = $e->getMessage();
+}
+
+// Get profile picture path
+function getProfilePicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    }
+    
+    return '../../' . ltrim($path, '/');
+}
+
+$profile_pic_path = getProfilePicturePath($user['profile_picture'] ?? '');
+
 // Get filter parameters
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 $type_filter = isset($_GET['type']) ? $_GET['type'] : 'all';
@@ -544,7 +585,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <i class="fas fa-bars"></i>
                 </button>
                 <div class="user-profile">
-                    <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="User Profile" class="user-avatar">
+                    <img src="<?= htmlspecialchars($profile_pic_path)?>" alt="User Profile" class="user-avatar">
                     <span><?php echo htmlspecialchars($_SESSION['username'] ?? 'Admin'); ?></span>
                 </div>
             </div>

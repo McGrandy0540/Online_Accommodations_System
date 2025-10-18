@@ -17,7 +17,42 @@ if (!$booking_id) {
     exit();
 }
 
-// Get booking details
+$user_id = $_SESSION['user_id'];
+
+// Fetch additional user details from database
+try {
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$user) {
+        throw new Exception("User not found");
+    }
+    
+} catch (PDOException $e) {
+    error_log("Database Error: " . $e->getMessage());
+    $error = "Failed to load user data. Please try again later.";
+} catch (Exception $e) {
+    error_log("Error: " . $e->getMessage());
+    $error = $e->getMessage();
+}
+
+// Get profile picture path
+function getProfilePicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    }
+    
+    return '../../' . ltrim($path, '/');
+}
+
+$profile_pic_path = getProfilePicturePath($user['profile_picture'] ?? '');
+
+// Get booking details - CORRECTED QUERY
 $stmt = $pdo->prepare("
     SELECT 
         b.*, 
@@ -25,6 +60,7 @@ $stmt = $pdo->prepare("
         p.location AS property_location,
         p.description AS property_description,
         p.price AS property_price,
+        p.owner_id, -- ADDED THIS LINE
         pr.room_number,
         pr.gender AS room_gender,
         pr.capacity AS room_capacity,
@@ -32,7 +68,7 @@ $stmt = $pdo->prepare("
         u_student.email AS student_email,
         u_student.phone_number AS student_phone,
         u_student.profile_picture AS student_avatar,
-        u_owner.username AS owner_name,
+        u_owner.username AS owner_name, -- CORRECTED: using p.owner_id to join
         u_owner.email AS owner_email,
         u_owner.phone_number AS owner_phone,
         u_owner.profile_picture AS owner_avatar,
@@ -44,7 +80,7 @@ $stmt = $pdo->prepare("
     FROM bookings b
     JOIN property p ON b.property_id = p.id
     JOIN users u_student ON b.user_id = u_student.id
-    JOIN users u_owner ON p.owner_id = u_owner.id
+    JOIN users u_owner ON p.owner_id = u_owner.id -- CORRECTED: using p.owner_id instead of non-existent owner_id in bookings
     LEFT JOIN property_rooms pr ON b.room_id = pr.id
     LEFT JOIN payments py ON b.id = py.booking_id
     WHERE b.id = ?
@@ -84,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_status'])) {
     ");
     $notif_stmt->execute([$booking['user_id'], $message]);
     
-    // Add notification to owner
+    // Add notification to owner - FIXED: Use the correct owner_id from property table
     $owner_message = "Booking #{$booking_id} for your property has been updated to " . ucfirst($new_status);
     $notif_stmt->execute([$booking['owner_id'], $owner_message]);
     
@@ -595,7 +631,7 @@ if (empty($property_images)) {
                     <i class="fas fa-bars"></i>
                 </button>
                 <div class="user-profile">
-                    <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="User Profile" class="user-avatar">
+                    <img src="<?= htmlspecialchars($profile_pic_path) ?>" alt="User Profile" class="user-avatar">
                     <span><?php echo htmlspecialchars($_SESSION['username'] ?? 'Admin'); ?></span>
                 </div>
             </div>
@@ -627,6 +663,8 @@ if (empty($property_images)) {
                             case 'confirmed': $status_class = 'bg-confirmed'; break;
                             case 'paid': $status_class = 'bg-paid'; break;
                             case 'cancelled': $status_class = 'bg-cancelled'; break;
+                            case 'pending_payment': $status_class = 'bg-pending'; break;
+                            case 'cash_approved': $status_class = 'bg-confirmed'; break;
                         }
                     ?>
                     <span class="status-badge <?= $status_class ?>">
@@ -901,6 +939,8 @@ if (empty($property_images)) {
                                     <option value="pending" <?= $booking['status'] === 'pending' ? 'selected' : '' ?>>Pending</option>
                                     <option value="confirmed" <?= $booking['status'] === 'confirmed' ? 'selected' : '' ?>>Confirmed</option>
                                     <option value="paid" <?= $booking['status'] === 'paid' ? 'selected' : '' ?>>Paid</option>
+                                    <option value="pending_payment" <?= $booking['status'] === 'pending_payment' ? 'selected' : '' ?>>Pending Payment</option>
+                                    <option value="cash_approved" <?= $booking['status'] === 'cash_approved' ? 'selected' : '' ?>>Cash Approved</option>
                                     <option value="cancelled" <?= $booking['status'] === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
                                 </select>
                             </div>

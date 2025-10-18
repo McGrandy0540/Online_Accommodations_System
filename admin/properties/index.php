@@ -12,7 +12,46 @@ if (!isset($_SESSION['user_id']) || $_SESSION['status'] !== 'admin') {
 require_once(__DIR__ . '../../../config/database.php');
 $db = Database::getInstance();
 
+// Get user data from session and database
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'] ?? 'Admin';
+$email = $_SESSION['email'] ?? '';
+$avatar = $_SESSION['avatar'] ?? 'https://randomuser.me/api/portraits/men/32.jpg';
+$status = $_SESSION['status'] ?? 'admin';
 
+// Fetch additional user details from database
+try {
+    $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$user) {
+        throw new Exception("User not found");
+    }
+    
+} catch (PDOException $e) {
+    error_log("Database Error: " . $e->getMessage());
+    $error = "Failed to load user data. Please try again later.";
+} catch (Exception $e) {
+    error_log("Error: " . $e->getMessage());
+    $error = $e->getMessage();
+}
+
+// Get profile picture path
+function getProfilePicturePath($path) {
+    if (empty($path)) {
+        return null;
+    }
+    
+    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+        return $path;
+    }
+    
+    return '../../' . ltrim($path, '/');
+}
+
+
+$profile_pic_path = getProfilePicturePath($user['profile_picture'] ?? '');
 // Pagination setup
 $items_per_page = 10;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -81,6 +120,22 @@ try {
     
     $stmt->execute();
     $properties = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get occupied rooms count for each property
+    foreach ($properties as &$property) {
+        $occupied_stmt = $db->prepare("
+            SELECT COUNT(DISTINCT room_id) as occupied_rooms 
+            FROM bookings 
+            WHERE property_id = ? 
+            AND status IN ('confirmed', 'paid', 'cash_approved')
+            AND room_id IS NOT NULL
+        ");
+        $occupied_stmt->execute([$property['id']]);
+        $occupied_result = $occupied_stmt->fetch(PDO::FETCH_ASSOC);
+        $property['occupied_rooms'] = $occupied_result['occupied_rooms'] ?? 0;
+    }
+    
+    unset($property); // Break the reference
 } catch (PDOException $e) {
     die("Error fetching properties: " . $e->getMessage());
 }
@@ -299,8 +354,6 @@ $page_title = "Property Management";
             width: 100%;
             padding: 15px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
-            display: flex;
-            align-items: center;
         }
         
         .logout-btn {
@@ -310,6 +363,10 @@ $page_title = "Property Management";
             text-decoration: none;
             transition: all 0.3s;
             width: 100%;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
         }
         
         .logout-btn:hover {
@@ -484,8 +541,7 @@ $page_title = "Property Management";
             text-align: center;
         }
 
-
-         .carousel-item img {
+        .carousel-item img {
             height: 180px;
             object-fit: cover;
             width: 100%;
@@ -575,42 +631,6 @@ $page_title = "Property Management";
             box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
         }
         
-        /* Table Styles */
-        .table-responsive {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 800px;
-        }
-        
-        table th {
-            background: var(--light);
-            font-weight: 600;
-            color: var(--dark);
-            text-align: left;
-            padding: 15px;
-            position: sticky;
-            top: 0;
-        }
-        
-        table td {
-            padding: 12px 15px;
-            border-bottom: 1px solid var(--light-gray);
-            vertical-align: middle;
-        }
-        
-        table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        table tr:hover {
-            background: rgba(67, 97, 238, 0.05);
-        }
-        
         /* Status Badges */
         .status {
             display: inline-block;
@@ -639,34 +659,6 @@ $page_title = "Property Management";
         .status.pending {
             background: #e6f7ff;
             color: #1890ff;
-        }
-        
-        /* Property Image Thumbnail */
-        .property-image-thumb {
-            width: 80px;
-            height: 60px;
-            object-fit: cover;
-            border-radius: 6px;
-            transition: transform 0.3s;
-        }
-        
-        .property-image-thumb:hover {
-            transform: scale(1.5);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            z-index: 10;
-            position: relative;
-        }
-        
-        .no-image {
-            width: 80px;
-            height: 60px;
-            background: var(--light-gray);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 6px;
-            font-size: 0.8rem;
-            color: var(--gray);
         }
         
         /* Button Styles */
@@ -1103,21 +1095,16 @@ $page_title = "Property Management";
                             <span>Approvals</span>
                         </a>
                     </li>
-                    
                 </ul>
             </nav>
             <div class="sidebar-footer">
-                <ul>
-                    <li>
-                        <form action="../logout.php" method="POST">
-                           <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-                            <button type="submit" class="dropdown-item">
-                              <i class="fas fa-sign-out-alt "></i> Logout
-                           </button>
-                        </form>
-                   </li>
-                </ul>
-
+                <form action="../logout.php" method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?? ''; ?>">
+                    <button type="submit" class="logout-btn">
+                        <i class="fas fa-sign-out-alt"></i> 
+                        <span>Logout</span>
+                    </button>
+                </form>
             </div>
         </aside>
         
@@ -1133,24 +1120,21 @@ $page_title = "Property Management";
                 </form>
             </div>
             <div class="nav-right">
-                <div class="notification-btn">
-                    <i class="fas fa-bell"></i>
-                    <span class="notification-badge"></span>
-                </div>
+                <a href="../notifications/" class="notification-btn"><i class="fas fa-bell" ></i> <span class="notification-badge"></span></a>
+            
                 <div class="user-profile-btn" id="userProfileBtn">
                     <div class="user-profile">
-                        <img src="../profiles/<?php echo htmlspecialchars($_SESSION['profile_pic'] ?? 'default.jpg'); ?>" class="user-avatar" alt="User Avatar">
-                        <span class="user-name"><?php echo htmlspecialchars($_SESSION['name'] ?? 'Admin'); ?></span>
+                        <img src="<?php echo htmlspecialchars($profile_pic_path); ?>" class="user-avatar" alt="User Avatar">
+                        <span class="user-name"><?php echo htmlspecialchars($username); ?></span>
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div class="dropdown-menu" id="userDropdown">
-                        <a href="../users/view.php?id=<?php echo $_SESSION['user_id']; ?>">
+                        <a href="../profile/index.php">
                             <i class="fas fa-user"></i> Profile
                         </a>
-                        <a href="../settings/notifications.php">
+                        <a href="../profile/index.php#security">
                             <i class="fas fa-cog"></i> Settings
                         </a>
-                      
                     </div>
                 </div>
             </div>
@@ -1200,21 +1184,6 @@ $page_title = "Property Management";
                             </a>
                         </div>
                     <?php else: ?>
-                        <div class="table-responsive">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Image</th>
-                                        <th>Name</th>
-                                        <th>Category</th>
-                                        <th>Price</th>
-                                        <th>Location</th>
-                                        <th>Status</th>
-                                        <th>Owner</th>
-                                        <th class="text-right">Actions</th>
-                                    </tr>
-                                </thead>
                         <div class="property-grid">
                             <?php foreach ($properties as $property): ?>
                             <div class="property-card fade-in">
@@ -1226,39 +1195,39 @@ $page_title = "Property Management";
                                 $images = $image_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 ?>
                                 
-                            <div class="carousel-container" >
-                                <!-- Carousel Container -->
-                                 <div id="carousel-<?= $property['id'] ?>" class="carousel slide">
-                                                        <div class="carousel-inner">
-                                                            <?php if (!empty($images)): ?>
-                                                                <?php foreach ($images as $index => $image): ?>
-                                                                    <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
-                                                                        <img src="../../uploads/<?= htmlspecialchars($image['image_url']) ?>" 
-                                                                             class="d-block w-100 property-img" 
-                                                                             alt="Property image">
-                                                                    </div>
-                                                                <?php endforeach; ?>
-                                                            <?php else: ?>
-                                                                <div class="carousel-item active">
-                                                                    <img src="../../assets/images/default-property.jpg" 
-                                                                         class="d-block w-100 property-img" 
-                                                                         alt="Default property image">
-                                                                </div>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                        <?php if (count($images) > 1): ?>
-                                                            <button class="carousel-control-prev" type="button" 
-                                                                    data-bs-target="#carousel-<?= $property['id'] ?>" 
-                                                                    data-bs-slide="prev">
-                                                                <span class="carousel-control-prev-icon"></span>
-                                                            </button>
-                                                            <button class="carousel-control-next" type="button" 
-                                                                    data-bs-target="#carousel-<?= $property['id'] ?>" 
-                                                                    data-bs-slide="next">
-                                                                <span class="carousel-control-next-icon"></span>
-                                                            </button>
-                                                        <?php endif; ?>
+                                <div class="carousel-container">
+                                    <!-- Carousel Container -->
+                                    <div id="carousel-<?= $property['id'] ?>" class="carousel slide">
+                                        <div class="carousel-inner">
+                                            <?php if (!empty($images)): ?>
+                                                <?php foreach ($images as $index => $image): ?>
+                                                    <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
+                                                        <img src="../../uploads/<?= htmlspecialchars($image['image_url']) ?>" 
+                                                             class="d-block w-100 property-img" 
+                                                             alt="Property image">
                                                     </div>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <div class="carousel-item active">
+                                                    <img src="../../assets/images/default-property.jpg" 
+                                                         class="d-block w-100 property-img" 
+                                                         alt="Default property image">
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if (count($images) > 1): ?>
+                                            <button class="carousel-control-prev" type="button" 
+                                                    data-bs-target="#carousel-<?= $property['id'] ?>" 
+                                                    data-bs-slide="prev">
+                                                <span class="carousel-control-prev-icon"></span>
+                                            </button>
+                                            <button class="carousel-control-next" type="button" 
+                                                    data-bs-target="#carousel-<?= $property['id'] ?>" 
+                                                    data-bs-slide="next">
+                                                <span class="carousel-control-next-icon"></span>
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                                 <div class="property-details">
                                     <h3><?php echo htmlspecialchars($property['property_name']); ?></h3>
@@ -1275,8 +1244,8 @@ $page_title = "Property Management";
                                     <div class="property-info">
                                         <p><i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($property['location']); ?></p>
                                         <p><i class="fas fa-door-open"></i> <?php echo $property['num_rooms']; ?> rooms (<?php echo $property['capacity']; ?> students/room)</p>
-                                        <?php if ($property['status'] === 'booked'): ?>
-                                            <p><i class="fas fa-bed"></i> <?php echo $property['occupied_rooms']; ?> rooms occupied</p>
+                                        <?php if ($property['status'] === 'booked' || $property['occupied_rooms'] > 0): ?>
+                                            <p><i class="fas fa-bed"></i> <?php echo $property['occupied_rooms'] ?? 0; ?> rooms occupied</p>
                                         <?php endif; ?>
                                         <p><i class="fas fa-user"></i> Owner: <?php echo htmlspecialchars($property['owner_name']); ?></p>
                                     </div>
@@ -1294,8 +1263,6 @@ $page_title = "Property Management";
                                 </div>
                             </div>
                             <?php endforeach; ?>
-                        </div>
-                            </table>
                         </div>
                         
                         <!-- Pagination -->
@@ -1355,80 +1322,66 @@ $page_title = "Property Management";
             </div>
         </div>
     </div>
-<!-- Add Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-<script>
-    // Toggle sidebar
-    const sidebarToggle = document.getElementById('sidebarToggle');
-    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    const body = document.body;
-    
-    sidebarToggle.addEventListener('click', function() {
-        body.classList.toggle('sidebar-collapsed');
-        // Save state to cookie
-        document.cookie = `sidebarCollapsed=${body.classList.contains('sidebar-collapsed')}; path=/; max-age=${60*60*24*30}`;
-    });
-    
-    mobileMenuBtn.addEventListener('click', function() {
-        document.querySelector('.sidebar').classList.toggle('show');
-    });
-    
-    // User dropdown
-    const userProfileBtn = document.getElementById('userProfileBtn');
-    const userDropdown = document.getElementById('userDropdown');
-    
-    userProfileBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        userDropdown.classList.toggle('show');
-    });
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', function() {
-        userDropdown.classList.remove('show');
-    });
-    
-    // Confirm delete
-    function confirmDelete(id) {
-        Swal.fire({
-            title: 'Are you sure?',
-            text: "You won't be able to revert this!",
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#4361ee',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Yes, delete it!'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                window.location.href = 'delete.php?id=' + id;
-            }
+    <!-- Add Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        // Toggle sidebar
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const body = document.body;
+        
+        sidebarToggle.addEventListener('click', function() {
+            body.classList.toggle('sidebar-collapsed');
+            // Save state to cookie
+            document.cookie = `sidebarCollapsed=${body.classList.contains('sidebar-collapsed')}; path=/; max-age=${60*60*24*30}`;
         });
-    }
-    
-    // Initialize carousels
-   document.addEventListener('DOMContentLoaded', function() {
+        
+        mobileMenuBtn.addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.toggle('show');
+        });
+        
+        // User dropdown
+        const userProfileBtn = document.getElementById('userProfileBtn');
+        const userDropdown = document.getElementById('userDropdown');
+        
+        userProfileBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            userDropdown.classList.toggle('show');
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function() {
+            userDropdown.classList.remove('show');
+        });
+        
+        // Confirm delete
+        function confirmDelete(id) {
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "You won't be able to revert this!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#4361ee',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, delete it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = 'delete.php?id=' + id;
+                }
+            });
+        }
+        
+        // Initialize carousels
+        document.addEventListener('DOMContentLoaded', function() {
             const sidebarState = document.cookie.split('; ').find(row => row.startsWith('sidebarCollapsed='));
             if (sidebarState && sidebarState.split('=')[1] === 'true') {
                 body.classList.add('sidebar-collapsed');
             }
             
-            // // Initialize carousels with 5-second interval
-            // var carousels = document.querySelectorAll('.carousel');
-            // carousels.forEach(function(carousel) {
-            //     new bootstrap.Carousel(carousel, {
-            //         interval: 5000,
-            //         ride: 'carousel'
-            //     });
-            // });
-    });
-
-
-
-
-            
-        
-        // Initialize carousels
-        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize carousels with 5-second interval
             var carousels = document.querySelectorAll('.carousel');
             carousels.forEach(function(carousel) {
                 new bootstrap.Carousel(carousel, {
@@ -1437,16 +1390,6 @@ $page_title = "Property Management";
                 });
             });
         });
-
-
-        
-
-
-
-    
-</script>
+    </script>
 </body>
 </html>
-
-
-

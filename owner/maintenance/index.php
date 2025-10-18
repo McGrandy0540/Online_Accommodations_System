@@ -35,8 +35,9 @@ function getProfilePicturePath($path) {
 }
 $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
 
-// CORRECTED: Get maintenance requests with proper owner filtering
+// CORRECTED: Get maintenance requests with proper owner filtering and room information
 $query = "SELECT mr.*, p.property_name, p.id as property_id, u.username as student_name, u.email as student_email,
+          pr.room_number,
           (SELECT COUNT(*) FROM maintenance_messages mm 
            WHERE mm.maintenance_request_id = mr.id AND mm.sender_type = 'student' AND mm.is_read = FALSE) as unread_student_messages,
           (SELECT COUNT(*) FROM maintenance_messages mm 
@@ -44,6 +45,8 @@ $query = "SELECT mr.*, p.property_name, p.id as property_id, u.username as stude
           FROM maintenance_requests mr
           JOIN property p ON mr.property_id = p.id
           JOIN users u ON mr.user_id = u.id
+          LEFT JOIN bookings b ON mr.booking_id = b.id
+          LEFT JOIN property_rooms pr ON b.room_id = pr.id
           WHERE p.owner_id = ?
           ORDER BY 
             CASE 
@@ -278,6 +281,73 @@ $unread_messages = $messages->fetchColumn();
             .message-image {
                 max-width: 200px;
                 max-height: 120px;
+            }
+        }
+
+        /* Chat Banner Styles */
+        .chat-banner {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+            color: white;
+            padding: 1rem 1.25rem;
+            border-radius: var(--border-radius);
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .chat-banner-icon {
+            font-size: 2rem;
+            opacity: 0.9;
+        }
+
+        .chat-banner-content {
+            flex: 1;
+        }
+
+        .chat-banner-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .chat-banner-subtitle {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .chat-banner-room {
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        @media (max-width: 576px) {
+            .chat-banner {
+                padding: 0.75rem 1rem;
+            }
+
+            .chat-banner-icon {
+                font-size: 1.5rem;
+            }
+
+            .chat-banner-title {
+                font-size: 1rem;
+            }
+
+            .chat-banner-subtitle {
+                font-size: 0.85rem;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.25rem;
             }
         }
 
@@ -1006,7 +1076,7 @@ $unread_messages = $messages->fetchColumn();
     <header class="main-header">
         <div class="header-container">
             <a href="../" class="logo">
-                <img src="../../assets/images/ktu logo.png" alt="Landlords&Tenant Logo">
+                <img src="../../assets/images/landlords-logo.png" alt="Landlords&Tenant Logo">
                 <span>Landlords&Tenant</span>
             </a>
             
@@ -1023,16 +1093,17 @@ $unread_messages = $messages->fetchColumn();
                         <span class="d-none d-md-inline"><?= htmlspecialchars($owner['username']) ?></span>
                     </div>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="../owner/profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
-                        <li><a class="dropdown-item" href="../owner/settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                        <li><a class="dropdown-item" href="../settings.php"><i class="fas fa-user me-2"></i>Profile</a></li>
+                        <li><a class="dropdown-item" href="../settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <form action="../auth/logout.php" method="POST">
+                       <li>
+                         <form action="logout.php" method="POST">
+                                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                                 <button type="submit" class="dropdown-item">
-                                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                                    <i class="fas fa-sign-out-alt "></i> Logout
                                 </button>
-                            </form>
-                        </li>
+                          </form>
+                      </li>
                     </ul>
                 </div>
                 <button class="menu-toggle" id="menuToggle">
@@ -1058,7 +1129,6 @@ $unread_messages = $messages->fetchColumn();
                     <li><a href="../bookings/"><i class="fas fa-calendar-alt"></i> <span class="menu-text">Bookings</span></a></li>
                     <li><a href="../payments/"><i class="fas fa-wallet"></i> <span class="menu-text">Payments</span></a></li>
                     <li><a href="../reviews/"><i class="fas fa-star"></i> <span class="menu-text">Reviews</span></a></li>
-                    <li><a href="../chat/"><i class="fas fa-comments"></i> <span class="menu-text">Messages</span></a></li>
                     <li><a href="index.php" class="active"><i class="fas fa-tools"></i> <span class="menu-text">Maintenance</span></a></li>
                     <li><a href="../virtual-tours/"><i class="fas fa-video"></i> <span class="menu-text">Virtual Tours</span></a></li>
                     <li><a href="../settings.php"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
@@ -1186,14 +1256,8 @@ $unread_messages = $messages->fetchColumn();
                                                 </button>
                                                 
                                                 <?php if ($request['status'] !== 'completed'): ?>
-                                                    <!-- FIXED: Correct virtual tour creation path -->
-                                                    <form method="POST" action="../virtual-tours/create.php" style="display: inline;">
-                                                        <input type="hidden" name="request_id" value="<?= $request['id'] ?>">
-                                                        <input type="hidden" name="property_id" value="<?= $request['property_id'] ?>">
-                                                        <button type="submit" class="btn btn-success" name="create_virtual_tour">
-                                                            <i class="fas fa-video"></i> Create Virtual Tour
-                                                        </button>
-                                                    </form>
+                                                  
+  
                                                 <?php endif; ?>
                                             </div>
                                         </div>
@@ -1203,8 +1267,32 @@ $unread_messages = $messages->fetchColumn();
                                     <?php if ($request['total_messages'] > 0): ?>
                                         <div class="collapse mt-3" id="messages<?= $request['id'] ?>">
                                             <div class="card">
-                                                <div class="card-header">
-                                                    <h6 class="mb-0">Conversation with <?= htmlspecialchars($request['student_name']) ?></h6>
+                                                <!-- Student Information Banner -->
+                                                <div class="chat-banner">
+                                                    <div class="chat-banner-icon">
+                                                        <i class="fas fa-user-graduate"></i>
+                                                    </div>
+                                                    <div class="chat-banner-content">
+                                                        <div class="chat-banner-title">
+                                                            <i class="fas fa-comments me-2"></i>Chatting with <?= htmlspecialchars($request['student_name']) ?>
+                                                        </div>
+                                                        <div class="chat-banner-subtitle">
+                                                            <span>
+                                                                <i class="fas fa-building me-1"></i><?= htmlspecialchars($request['property_name']) ?>
+                                                            </span>
+                                                            <?php if (!empty($request['room_number'])): ?>
+                                                                <span class="chat-banner-room">
+                                                                    <i class="fas fa-door-open"></i>
+                                                                    Room <?= htmlspecialchars($request['room_number']) ?>
+                                                                </span>
+                                                            <?php else: ?>
+                                                                <span class="chat-banner-room">
+                                                                    <i class="fas fa-home"></i>
+                                                                    Property-wide request
+                                                                </span>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                                                     <?php

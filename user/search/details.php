@@ -55,12 +55,37 @@ $feature_stmt = $pdo->prepare("SELECT feature_name FROM property_features WHERE 
 $feature_stmt->execute([$property_id]);
 $features = $feature_stmt->fetchAll(PDO::FETCH_COLUMN);
 
-// Fetch available rooms
+// SIMPLIFIED: Remove status filter and rely on capacity calculations
 $room_stmt = $pdo->prepare("
-    SELECT * FROM property_rooms 
-    WHERE property_id = ? 
-    AND status = 'available'
-    AND levy_payment_status = 'approved'
+    SELECT pr.*, 
+           -- Count confirmed bookings (actual occupants)
+           (SELECT COUNT(*) 
+            FROM bookings b 
+            WHERE b.room_id = pr.id 
+            AND b.status IN ('confirmed', 'paid', 'cash_approved')
+            AND (b.cancelled_at IS NULL OR b.status != 'cancelled')
+           ) AS confirmed_bookings,
+           -- Count active pending bookings (these reserve spots temporarily)
+           (SELECT COUNT(*) 
+            FROM bookings b 
+            WHERE b.room_id = pr.id 
+            AND b.status IN ('pending', 'pending_payment')
+            AND (b.cancelled_at IS NULL OR b.status != 'cancelled')
+           ) AS pending_bookings,
+           -- Calculate actual available capacity
+           (pr.capacity - 
+            (SELECT COUNT(*) 
+             FROM bookings b 
+             WHERE b.room_id = pr.id 
+             AND b.status IN ('confirmed', 'paid', 'cash_approved')
+             AND (b.cancelled_at IS NULL OR b.status != 'cancelled')
+            )
+           ) AS actual_physical_capacity
+    FROM property_rooms pr 
+    WHERE pr.property_id = ? 
+    AND pr.levy_payment_status = 'approved'
+    AND (pr.levy_expiry_date IS NULL OR pr.levy_expiry_date >= CURDATE())
+    ORDER BY pr.room_number ASC
 ");
 $room_stmt->execute([$property_id]);
 $rooms = $room_stmt->fetchAll();
@@ -104,8 +129,23 @@ if ($property_owner) {
     $owner_videos = $videos_stmt->fetchAll();
 }
 // ========== END VIRTUAL TOURS COMPONENT ==========
-?>
 
+// PERFECTED: Calculate total available spots for the property
+$total_available_spots = 0;
+$total_confirmed_bookings = 0;
+$total_pending_bookings = 0;
+$total_cancelled_bookings = 0;
+
+foreach ($rooms as $room) {
+    // PERFECTED: Calculate available spots properly
+    // Cancelled bookings free up spots, pending bookings reserve spots
+    $available_spots = $room['actual_physical_capacity'] - $room['pending_bookings'];
+    $total_available_spots += max(0, $available_spots);
+    $total_confirmed_bookings += $room['confirmed_bookings'];
+    $total_pending_bookings += $room['pending_bookings'];
+  
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -144,7 +184,6 @@ if ($property_owner) {
             color: var(--dark-color);
         }
 
-        /* Header Styles */
         .property-header {
             background-color: var(--secondary-color);
             color: white;
@@ -160,14 +199,12 @@ if ($property_owner) {
             padding: 0 15px;
         }
 
-        /* Main Content */
         .property-container {
             max-width: 1200px;
             margin: 2rem auto;
             padding: 0 15px;
         }
 
-        /* Property Gallery */
         .property-gallery {
             display: grid;
             grid-template-columns: 2fr 1fr;
@@ -200,7 +237,6 @@ if ($property_owner) {
             object-fit: cover;
         }
 
-        /* Property Info */
         .property-info-grid {
             display: grid;
             grid-template-columns: 2fr 1fr;
@@ -243,7 +279,6 @@ if ($property_owner) {
             color: var(--primary-color);
         }
 
-        /* Reviews Section */
         .review-card {
             background: white;
             border-radius: var(--border-radius);
@@ -277,15 +312,29 @@ if ($property_owner) {
             margin-bottom: 0.5rem;
         }
 
-        /* Map Section */
         .map-container {
-            height: 400px;
+            height: 500px;
             border-radius: var(--border-radius);
             box-shadow: var(--card-shadow);
             margin: 2rem 0;
+            position: relative;
         }
 
-        /* Rooms Section */
+        #directions-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            max-height: 400px;
+            overflow-y: auto;
+            width: 300px;
+            z-index: 1000;
+            display: none;
+        }
+
         .room-card {
             background: white;
             border-radius: var(--border-radius);
@@ -300,7 +349,6 @@ if ($property_owner) {
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
 
-        /* Contact Owner */
         .contact-owner {
             background: white;
             border-radius: var(--border-radius);
@@ -309,7 +357,6 @@ if ($property_owner) {
             margin: 2rem 0;
         }
 
-        /* Buttons */
         .btn {
             display: inline-flex;
             align-items: center;
@@ -345,7 +392,6 @@ if ($property_owner) {
             color: white;
         }
 
-        /* Badges */
         .badge {
             padding: 0.5rem 1rem;
             border-radius: 20px;
@@ -362,7 +408,6 @@ if ($property_owner) {
             color: white;
         }
 
-        /* Property Features */
         .property-features {
             display: flex;
             gap: 1rem;
@@ -379,7 +424,6 @@ if ($property_owner) {
             border-radius: 20px;
         }
 
-        /* Price per student */
         .price-per-student {
             font-size: 1.1rem;
             font-weight: 600;
@@ -387,14 +431,12 @@ if ($property_owner) {
             margin-top: 0.5rem;
         }
         
-        /* Room specific actions */
         .room-actions {
             margin-top: 1rem;
             display: flex;
             justify-content: flex-end;
         }
 
-        /* Responsive Styles */
         @media (max-width: 992px) {
             .property-gallery {
                 grid-template-columns: 1fr;
@@ -414,6 +456,13 @@ if ($property_owner) {
             
             .property-info-grid {
                 grid-template-columns: 1fr;
+            }
+
+            #directions-panel {
+                position: relative;
+                width: 100%;
+                max-height: 200px;
+                margin-bottom: 1rem;
             }
         }
 
@@ -439,7 +488,6 @@ if ($property_owner) {
             }
         }
         
-        /* Booking Form */
         .booking-form {
             background: white;
             border-radius: var(--border-radius);
@@ -452,7 +500,6 @@ if ($property_owner) {
             margin-bottom: 1.5rem;
         }
         
-        /* Back Button */
         .back-btn {
             color: white;
             text-decoration: none;
@@ -461,7 +508,6 @@ if ($property_owner) {
             gap: 0.5rem;
         }
         
-        /* Availability badge */
         .availability-badge {
             padding: 0.25rem 0.5rem;
             border-radius: 20px;
@@ -484,7 +530,30 @@ if ($property_owner) {
             color: #721c24;
         }
 
-        /* ========== VIRTUAL TOURS STYLES ========== */
+        .capacity-info {
+            background-color: #e3f2fd;
+            border-left: 3px solid var(--primary-color);
+            padding: 0.75rem;
+            margin: 1rem 0;
+            border-radius: 0 var(--border-radius) var(--border-radius) 0;
+            font-size: 0.9rem;
+        }
+        
+        .booking-count {
+            display: inline-block;
+            background-color: var(--info-color);
+            color: white;
+            padding: 0.15rem 0.5rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-right: 0.5rem;
+        }
+        
+        .available-count {
+            font-weight: 600;
+            color: var(--success-color);
+        }
+
         .property-tours-card {
             border: none;
             border-radius: 8px;
@@ -612,7 +681,40 @@ if ($property_owner) {
                 grid-template-columns: 1fr;
             }
         }
-        /* ========== END VIRTUAL TOURS STYLES ========== */
+
+        .location-controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .location-btn {
+            background: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+        }
+
+        .location-btn:hover {
+            background: #f8f9fa;
+        }
+
+        .distance-info {
+            background: white;
+            padding: 0.5rem 1rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            margin-top: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -624,7 +726,7 @@ if ($property_owner) {
                     <i class="fas fa-arrow-left"></i> Back to Search
                 </a>
                 <h1 class="h4 mb-0">Property Details</h1>
-                <div></div> <!-- Empty spacer for symmetry -->
+                <div></div>
             </div>
         </div>
     </header>
@@ -719,7 +821,6 @@ if ($property_owner) {
                 
                 <!-- ========== VIRTUAL TOURS SECTION ========== -->
                 <?php if (!empty($owner_videos)): ?>
-                <!-- Property Virtual Tours Section -->
                 <div class="card property-tours-card mb-4">
                     <div class="card-header bg-primary text-white">
                         <h5 class="mb-0">
@@ -796,21 +897,50 @@ if ($property_owner) {
                 <!-- Available Rooms -->
                 <div class="mb-4">
                     <h3>Available Rooms</h3>
+                    
+                    <!-- Property Summary -->
+                    <div class="capacity-info mb-3">
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="booking-count">
+                                <i class="fas fa-bookmark"></i> <?= $total_confirmed_bookings ?> confirmed
+                            </span>
+                            <?php if ($total_pending_bookings > 0): ?>
+                                <span class="booking-count" style="background-color: var(--warning-color);">
+                                    <i class="fas fa-clock"></i> <?= $total_pending_bookings ?> pending
+                                </span>
+                            <?php endif; ?>
+                            <?php if ($total_cancelled_bookings > 0): ?>
+                                <span class="booking-count" style="background-color: var(--accent-color);">
+                                    <i class="fas fa-times"></i> <?= $total_cancelled_bookings ?> cancelled
+                                </span>
+                            <?php endif; ?>
+                            <span class="available-count ms-3">
+                                <i class="fas fa-user-friends"></i> <?= $total_available_spots ?> spots available
+                            </span>
+                        </div>
+                    </div>
+                    
                     <?php if (!empty($rooms)): ?>
-                        <?php foreach ($rooms as $room): 
-                            // Calculate available spots
-                            $available_spots = $room['capacity'] - $room['current_occupancy'];
+                        <?php 
+                        $has_available_rooms = false;
+                        foreach ($rooms as $room): 
+                            // Calculate available spots properly
+                            // Cancelled bookings free up spots (already freed in actual_physical_capacity)
+                            // Pending bookings reserve spots (need to subtract these)
+                            $actual_available = max(0, $room['actual_physical_capacity'] - $room['pending_bookings']);
                             
                             // Determine availability status
-                            if ($available_spots == 0) {
+                            if ($actual_available == 0) {
                                 $availability_class = "full";
                                 $availability_text = "Fully Booked";
-                            } elseif ($available_spots <= 2) {
+                            } elseif ($actual_available <= 2) {
                                 $availability_class = "limited";
                                 $availability_text = "Limited Availability";
+                                $has_available_rooms = true;
                             } else {
                                 $availability_class = "available";
                                 $availability_text = "Available";
+                                $has_available_rooms = true;
                             }
                         ?>
                             <div class="room-card">
@@ -828,15 +958,28 @@ if ($property_owner) {
                                     </div>
                                     <div class="d-flex align-items-center">
                                         <i class="fas fa-<?= $room['gender'] == 'male' ? 'mars' : 'venus' ?> me-2 text-muted"></i>
-                                        <span>Gender: <?= ucfirst($room['gender']) ?></span>
+                                        <span>Gender: <?= ucfirst($room['gender'] ?? 'Any') ?></span>
                                     </div>
                                 </div>
                                 
                                 <div class="d-flex mt-2">
-                                    <div class="d-flex align-items-center">
-                                        <i class="fas fa-user-clock me-2 text-muted"></i>
-                                        <span>Occupancy: <?= $room['current_occupancy'] ?>/<?= $room['capacity'] ?></span>
+                                    <div class="d-flex align-items-center flex-wrap">
+                                        <i class="fas fa-users me-2 text-muted"></i>
+                                        <span><strong>Occupied:</strong> <?= $room['confirmed_bookings'] ?>/<?= $room['capacity'] ?></span>
+                                        <span class="ms-3 text-muted">|</span>
+                                        <span class="ms-3"><strong>Available:</strong> <span class="text-success"><?= $actual_available ?></span></span>
+                                        <?php if ($room['pending_bookings'] > 0): ?>
+                                            <span class="text-warning ms-3">(<?= $room['pending_bookings'] ?> pending)</span>
+                                        <?php endif; ?>
+                                        
                                     </div>
+                                </div>
+                                
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle"></i> 
+                                        When bookings are cancelled, spots become immediately available for new bookings
+                                    </small>
                                 </div>
                                 
                                 <div class="price-per-student">
@@ -844,24 +987,55 @@ if ($property_owner) {
                                 </div>
                                 
                                 <div class="room-actions">
-                                    <a href="../bookings/create.php?property_id=<?= $property_id ?>&room_id=<?= $room['id'] ?>" 
-                                       class="btn btn-primary">
-                                        <i class="far fa-calendar-plus me-2"></i> Book This Room
-                                    </a>
+                                    <?php if ($actual_available > 0): ?>
+                                        <a href="../bookings/create.php?property_id=<?= $property_id ?>&room_id=<?= $room['id'] ?>" 
+                                           class="btn btn-primary">
+                                            <i class="far fa-calendar-plus me-2"></i> Book This Room
+                                        </a>
+                                    <?php else: ?>
+                                        <button class="btn btn-secondary" disabled>
+                                            <i class="fas fa-times me-2"></i> Fully Booked
+                                        </button>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         <?php endforeach; ?>
+                        
+                        <?php if (!$has_available_rooms): ?>
+                            <div class="alert alert-warning">
+                                All rooms are currently fully booked. Please check back later.
+                            </div>
+                        <?php endif; ?>
                     <?php else: ?>
                         <div class="alert alert-warning">
-                            No rooms currently available
+                            No rooms currently available for this property.
                         </div>
                     <?php endif; ?>
                 </div>
                 
                 <!-- Location Map -->
                 <div class="mb-4">
-                    <h3>Location</h3>
-                    <div class="map-container" id="property-map"></div>
+                    <h3>Location & Directions</h3>
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Real-time Directions:</strong> Get live directions from your current location to this property. 
+                        The map will automatically detect your location and show the best route.
+                    </div>
+                    <div class="map-container" id="property-map">
+                        <div class="location-controls">
+                            <button class="location-btn" onclick="getUserLocation()">
+                                <i class="fas fa-location-arrow"></i> My Location
+                            </button>
+                            <button class="location-btn" onclick="showDirections()">
+                                <i class="fas fa-directions"></i> Get Directions
+                            </button>
+                        </div>
+                        <div id="directions-panel"></div>
+                    </div>
+                    <div id="distance-info" class="distance-info" style="display: none;">
+                        <i class="fas fa-route text-primary me-2"></i>
+                        <span id="distance-text"></span>
+                    </div>
                 </div>
                 
                 <!-- Reviews Section -->
@@ -918,10 +1092,46 @@ if ($property_owner) {
                     <span class="text-muted">/year (per tenant)</span>
                 </div>
                 
+                <!-- Property Availability Summary -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Availability Summary</h5>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Total Available Spots:</span>
+                            <strong class="<?= $total_available_spots > 0 ? 'text-success' : 'text-danger' ?>">
+                                <?= $total_available_spots ?>
+                            </strong>
+                        </div>
+                        <?php if ($total_pending_bookings > 0): ?>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <span>Pending Bookings:</span>
+                                <strong class="text-warning"><?= $total_pending_bookings ?></strong>
+                            </div>
+                        <?php endif; ?>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <span>Confirmed Bookings:</span>
+                            <strong class="text-info"><?= $total_confirmed_bookings ?></strong>
+                        </div>
+                        <?php if ($total_cancelled_bookings > 0): ?>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <span>Cancelled Bookings:</span>
+                                <strong class="text-success"><?= $total_cancelled_bookings ?> (spots freed)</strong>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                
                 <div class="d-flex flex-column gap-2 mb-4">
-                    <a href="../bookings/create.php?property_id=<?= $property_id ?>" class="btn btn-primary">
-                        <i class="far fa-calendar-plus me-2"></i> Book Now
-                    </a>
+                    <?php if ($total_available_spots > 0): ?>
+                        <a href="../bookings/create.php?property_id=<?= $property_id ?>" class="btn btn-primary">
+                            <i class="far fa-calendar-plus me-2"></i> Book Now
+                        </a>
+                    <?php else: ?>
+                        <button class="btn btn-secondary" disabled>
+                            <i class="fas fa-times me-2"></i> Fully Booked
+                        </button>
+                    <?php endif; ?>
+                    
                     <button class="btn btn-outline">
                         <i class="far fa-heart me-2"></i> Save to Favorites
                     </button>
@@ -967,7 +1177,6 @@ if ($property_owner) {
 
     <!-- ========== VIDEO MODAL ========== -->
     <?php if (!empty($owner_videos)): ?>
-    <!-- Video Modal -->
     <div class="modal fade" id="propertyVideoModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
@@ -1000,6 +1209,8 @@ if ($property_owner) {
         let userLocation = null;
         let propertyLocation = null;
         let routingControl = null;
+        let userMarker = null;
+        let propertyMarker = null;
         
         // Calculate distance between two points using Haversine formula
         function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -1024,57 +1235,43 @@ if ($property_owner) {
             }
         }
         
-        // Get user's current location
+        // Format time for display
+        function formatTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            } else {
+                return `${minutes} minutes`;
+            }
+        }
+        
+        // Get user's current location with real-time tracking
         function getUserLocation() {
             if (navigator.geolocation) {
+                // Clear any existing location watch
+                if (window.locationWatchId) {
+                    navigator.geolocation.clearWatch(window.locationWatchId);
+                }
+                
+                // Get current position first
                 navigator.geolocation.getCurrentPosition(
                     function(position) {
-                        userLocation = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
+                        updateUserLocation(position);
                         
-                        // Add user location marker
-                        const userMarker = L.marker([userLocation.lat, userLocation.lng], {
-                            icon: L.icon({
-                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                                iconSize: [25, 41],
-                                iconAnchor: [12, 41],
-                                popupAnchor: [1, -34],
-                                shadowSize: [41, 41]
-                            })
-                        }).addTo(map);
-                        
-                        userMarker.bindPopup('<b>Your Location</b><br>Click on the property marker to get directions!');
-                        
-                        // Fit map to show both locations
-                        if (propertyLocation) {
-                            const group = new L.featureGroup([userMarker, propertyMarker]);
-                            map.fitBounds(group.getBounds().pad(0.1));
-                        }
+                        // Then watch for position changes
+                        window.locationWatchId = navigator.geolocation.watchPosition(
+                            updateUserLocation,
+                            handleLocationError,
+                            {
+                                enableHighAccuracy: true,
+                                timeout: 10000,
+                                maximumAge: 30000 // 30 seconds
+                            }
+                        );
                     },
-                    function(error) {
-                        console.log('Geolocation error:', error);
-                        let errorMessage = 'Unable to get your location. ';
-                        switch(error.code) {
-                            case error.PERMISSION_DENIED:
-                                errorMessage += 'Please allow location access to get directions.';
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                errorMessage += 'Location information is unavailable.';
-                                break;
-                            case error.TIMEOUT:
-                                errorMessage += 'Location request timed out.';
-                                break;
-                        }
-                        
-                        // Show error message in a popup
-                        const errorPopup = L.popup()
-                            .setLatLng(propertyLocation ? [propertyLocation.lat, propertyLocation.lng] : [5.6037, -0.1870])
-                            .setContent('<div class="alert alert-warning mb-0"><i class="fas fa-exclamation-triangle"></i> ' + errorMessage + '</div>')
-                            .openOn(map);
-                    },
+                    handleLocationError,
                     {
                         enableHighAccuracy: true,
                         timeout: 10000,
@@ -1082,18 +1279,105 @@ if ($property_owner) {
                     }
                 );
             } else {
-                console.log('Geolocation is not supported by this browser.');
-                const errorPopup = L.popup()
-                    .setLatLng(propertyLocation ? [propertyLocation.lat, propertyLocation.lng] : [5.6037, -0.1870])
-                    .setContent('<div class="alert alert-warning mb-0"><i class="fas fa-exclamation-triangle"></i> Geolocation is not supported by your browser.</div>')
-                    .openOn(map);
+                showLocationError('Geolocation is not supported by this browser.');
             }
         }
         
-        // Show directions between user location and property
+        // Update user location on map
+        function updateUserLocation(position) {
+            userLocation = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+            };
+            
+            // Remove existing user marker
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+            
+            // Add user location marker with pulsing effect
+            userMarker = L.marker([userLocation.lat, userLocation.lng], {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                })
+            }).addTo(map);
+            
+            userMarker.bindPopup(`
+                <div style="min-width: 200px;">
+                    <h6><b>Your Current Location</b></h6>
+                    <p class="mb-2"><i class="fas fa-map-marker-alt text-primary"></i> Real-time tracking active</p>
+                    <div class="d-grid">
+                        <button class="btn btn-sm btn-primary" onclick="showDirections()">
+                            <i class="fas fa-directions"></i> Update Directions
+                        </button>
+                    </div>
+                </div>
+            `).openPopup();
+            
+            // Fit map to show both locations
+            if (propertyLocation) {
+                const group = L.featureGroup([userMarker, propertyMarker]);
+                map.fitBounds(group.getBounds().pad(0.1));
+                
+                // Calculate and display distance
+                const distance = calculateDistance(
+                    userLocation.lat, userLocation.lng,
+                    propertyLocation.lat, propertyLocation.lng
+                );
+                
+                document.getElementById('distance-text').textContent = 
+                    `Distance: ${formatDistance(distance)} from your location`;
+                document.getElementById('distance-info').style.display = 'block';
+                
+                // Auto-show directions if user moves significantly
+                if (window.previousUserLocation) {
+                    const prevDistance = calculateDistance(
+                        window.previousUserLocation.lat, window.previousUserLocation.lng,
+                        userLocation.lat, userLocation.lng
+                    );
+                    
+                    if (prevDistance > 0.1) { // If moved more than 100 meters
+                        setTimeout(showDirections, 1000);
+                    }
+                }
+                
+                window.previousUserLocation = { ...userLocation };
+            }
+        }
+        
+        // Handle location errors
+        function handleLocationError(error) {
+            let errorMessage = 'Unable to get your location. ';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage += 'Please allow location access to get real-time directions.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage += 'Location information is unavailable.';
+                    break;
+                case error.TIMEOUT:
+                    errorMessage += 'Location request timed out.';
+                    break;
+            }
+            showLocationError(errorMessage);
+        }
+        
+        function showLocationError(message) {
+            const errorPopup = L.popup()
+                .setLatLng(propertyLocation ? [propertyLocation.lat, propertyLocation.lng] : [5.6037, -0.1870])
+                .setContent(`<div class="alert alert-warning mb-0"><i class="fas fa-exclamation-triangle"></i> ${message}</div>`)
+                .openOn(map);
+        }
+        
+        // Show real-time directions between user location and property
         function showDirections() {
             if (!userLocation || !propertyLocation) {
-                alert('Unable to calculate directions. Please ensure location access is enabled.');
+                alert('Unable to calculate directions. Please ensure location access is enabled and try "My Location" first.');
                 return;
             }
             
@@ -1108,7 +1392,7 @@ if ($property_owner) {
                 propertyLocation.lat, propertyLocation.lng
             );
             
-            // Add routing control
+            // Add routing control with real-time updates
             routingControl = L.Routing.control({
                 waypoints: [
                     L.latLng(userLocation.lat, userLocation.lng),
@@ -1118,46 +1402,62 @@ if ($property_owner) {
                 addWaypoints: false,
                 createMarker: function() { return null; }, // Don't create additional markers
                 lineOptions: {
-                    styles: [{ color: '#3498db', weight: 4, opacity: 0.7 }]
+                    styles: [{ color: '#3498db', weight: 6, opacity: 0.8 }]
                 },
-                show: false, // Hide the instruction panel initially
-                collapsible: true
+                show: true,
+                collapsible: true,
+                fitSelectedRoutes: true,
+                showAlternatives: false
             }).addTo(map);
             
-            // Update property marker popup with distance and directions info
+            // Update directions panel
+            routingControl.on('routesfound', function(e) {
+                const routes = e.routes;
+                const summary = routes[0].summary;
+                
+                document.getElementById('distance-text').innerHTML = `
+                    <strong>Route Summary:</strong><br>
+                    Distance: ${formatDistance(summary.totalDistance / 1000)}<br>
+                    Time: ${formatTime(summary.totalTime)}<br>
+                    <small class="text-muted">Directions update automatically as you move</small>
+                `;
+                document.getElementById('distance-info').style.display = 'block';
+            });
+            
+            // Update property marker popup
             propertyMarker.setPopupContent(`
-                <div style="min-width: 200px;">
+                <div style="min-width: 250px;">
                     <h6><b><?= addslashes($property['property_name']) ?></b></h6>
                     <p class="mb-2"><i class="fas fa-map-marker-alt text-primary"></i> <?= addslashes($property['location']) ?></p>
                     <div class="mb-2">
                         <i class="fas fa-route text-success"></i> 
-                        <strong>Distance: ${formatDistance(distance)}</strong>
+                        <strong>Real-time directions active</strong>
                     </div>
                     <div class="d-grid gap-2">
-                        <button class="btn btn-sm btn-primary" onclick="toggleDirections()">
-                            <i class="fas fa-directions"></i> Toggle Directions
+                        <button class="btn btn-sm btn-primary" onclick="toggleDirectionsPanel()">
+                            <i class="fas fa-list"></i> Toggle Directions
                         </button>
                         <a href="https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${propertyLocation.lat},${propertyLocation.lng}" 
                            target="_blank" class="btn btn-sm btn-success">
                             <i class="fab fa-google"></i> Open in Google Maps
                         </a>
+                        <button class="btn btn-sm btn-info" onclick="getUserLocation()">
+                            <i class="fas fa-sync-alt"></i> Update My Location
+                        </button>
                     </div>
                 </div>
             `);
             
-            // Open the updated popup
             propertyMarker.openPopup();
         }
         
         // Toggle directions panel visibility
-        function toggleDirections() {
-            if (routingControl) {
-                const container = routingControl.getContainer();
-                if (container.style.display === 'none') {
-                    container.style.display = 'block';
-                } else {
-                    container.style.display = 'none';
-                }
+        function toggleDirectionsPanel() {
+            const directionsPanel = document.getElementById('directions-panel');
+            if (directionsPanel.style.display === 'none') {
+                directionsPanel.style.display = 'block';
+            } else {
+                directionsPanel.style.display = 'none';
             }
         }
         
@@ -1192,17 +1492,17 @@ if ($property_owner) {
                     <div style="min-width: 200px;">
                         <h6><b><?= addslashes($property['property_name']) ?></b></h6>
                         <p class="mb-2"><i class="fas fa-map-marker-alt text-primary"></i> <?= addslashes($property['location']) ?></p>
-                        <div class="d-grid">
-                            <button class="btn btn-sm btn-primary" onclick="showDirections()">
-                                <i class="fas fa-location-arrow"></i> Get Directions
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-sm btn-primary" onclick="getUserLocation()">
+                                <i class="fas fa-location-arrow"></i> Start Real-time Directions
                             </button>
+                            <small class="text-muted mt-2 d-block">Click to get live directions from your current location</small>
                         </div>
-                        <small class="text-muted mt-2 d-block">Click "Get Directions" to see distance and route from your location</small>
                     </div>
                 `);
                 
-                // Get user location automatically
-                setTimeout(getUserLocation, 1000);
+                // Auto-get user location after a short delay
+                setTimeout(getUserLocation, 2000);
                 
             <?php else: ?>
                 // Default to Accra if no coordinates
@@ -1215,12 +1515,11 @@ if ($property_owner) {
                 // Show message that location is not available
                 L.popup()
                     .setLatLng([5.6037, -0.1870])
-                    .setContent('<div class="alert alert-info mb-0"><i class="fas fa-info-circle"></i> Property location not available</div>')
+                    .setContent('<div class="alert alert-info mb-0"><i class="fas fa-info-circle"></i> Property location coordinates not available</div>')
                     .openOn(map);
             <?php endif; ?>
         }
 
-        // ========== VIDEO PLAYER MANAGEMENT ==========
         <?php if (!empty($owner_videos)): ?>
         let currentVideoIndex = 0;
         let videoPlaylist = <?= json_encode(array_map(function($v) {
@@ -1245,10 +1544,8 @@ if ($property_owner) {
             videoModal.show();
             videoPlayer.play();
             
-            // Track video view
             trackVideoView(videoId);
             
-            // Update next button visibility
             if (currentVideoIndex >= videoPlaylist.length - 1) {
                 nextVideoBtn.style.display = 'none';
             } else {
@@ -1268,13 +1565,11 @@ if ($property_owner) {
             nextVideoBtn.addEventListener('click', playNextVideo);
         }
 
-        // Stop video when modal is closed
         document.getElementById('propertyVideoModal').addEventListener('hidden.bs.modal', function () {
             videoPlayer.pause();
             videoPlayer.currentTime = 0;
         });
 
-        // Track video views
         function trackVideoView(videoId) {
             fetch('track_video_view.php', {
                 method: 'POST',
@@ -1285,14 +1580,14 @@ if ($property_owner) {
             }).catch(err => console.log('Error tracking view:', err));
         }
         <?php endif; ?>
-        // ========== END VIDEO PLAYER MANAGEMENT ==========
 
         // Initialize map when page loads
         document.addEventListener('DOMContentLoaded', initMap);
         
         // Make functions globally available
         window.showDirections = showDirections;
-        window.toggleDirections = toggleDirections;
+        window.toggleDirectionsPanel = toggleDirectionsPanel;
+        window.getUserLocation = getUserLocation;
         <?php if (!empty($owner_videos)): ?>
         window.openVideoModal = openVideoModal;
         <?php endif; ?>

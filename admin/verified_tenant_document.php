@@ -158,21 +158,26 @@ foreach ($verification_history as $verification) {
 
 // Function to check if file exists and return appropriate path or data
 function getDocumentSource($file_path) {
-    // Check if file exists in uploads folder
-    $uploads_path = "../uploads/student_documents/" . $file_path;
+    if (empty($file_path)) {
+        return array('type' => 'not_found', 'path' => '');
+    }
     
-    if (file_exists($uploads_path)) {
-        // File exists in uploads folder
-        return array('type' => 'file', 'path' => $uploads_path);
-    } else {
-        // File doesn't exist in uploads folder, check if it's an absolute path
-        if (file_exists($file_path)) {
-            return array('type' => 'file', 'path' => $file_path);
-        } else {
-            // File doesn't exist
-            return array('type' => 'not_found', 'path' => $file_path);
+    // Check if file exists in uploads folder
+    $possible_paths = [
+        "../../uploads/student_documents/" . $file_path,
+        "../uploads/student_documents/" . $file_path,
+        "uploads/student_documents/" . $file_path,
+        $file_path
+    ];
+    
+    foreach ($possible_paths as $path) {
+        if (file_exists($path) && is_file($path)) {
+            return array('type' => 'file', 'path' => $path);
         }
     }
+    
+    // File doesn't exist
+    return array('type' => 'not_found', 'path' => $file_path);
 }
 ?>
 
@@ -673,52 +678,131 @@ function getDocumentSource($file_path) {
             border-bottom: none;
         }
 
-        /* Document viewer modal styles */
+        /* Enhanced Document Viewer Modal Styles */
         .document-modal {
             display: none;
             position: fixed;
-            z-index: 1000;
+            z-index: 10000;
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.9);
+            background-color: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(5px);
         }
         
         .document-modal-content {
             position: relative;
-            background-color: #fefefe;
-            margin: 5% auto;
-            padding: 20px;
-            width: 90%;
-            max-width: 900px;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            background-color: #fff;
+            margin: 2% auto;
+            padding: 0;
+            width: 95%;
+            max-width: 1200px;
+            height: 95vh;
+            border-radius: 12px;
+            box-shadow: 0 10px 50px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            border-bottom: 1px solid #e9ecef;
+            background: #f8f9fa;
+        }
+        
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--secondary-color);
+            margin: 0;
         }
         
         .close-document-modal {
-            position: absolute;
-            top: 15px;
-            right: 25px;
-            font-size: 35px;
+            font-size: 28px;
             font-weight: bold;
-            color: #fff;
+            color: #6c757d;
             cursor: pointer;
-            z-index: 1001;
+            background: none;
+            border: none;
+            padding: 5px;
+            transition: color 0.3s;
+        }
+        
+        .close-document-modal:hover {
+            color: var(--danger-color);
+        }
+        
+        .document-viewer-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f8f9fa;
+            position: relative;
+            overflow: hidden;
         }
         
         .document-viewer {
             width: 100%;
-            height: 80vh;
+            height: 100%;
             border: none;
-            border-radius: 4px;
+            background: white;
+        }
+        
+        .document-error {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        
+        .document-error i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            color: #dee2e6;
         }
         
         .document-actions {
             display: flex;
             justify-content: center;
-            gap: 10px;
-            margin-top: 15px;
+            gap: 15px;
+            padding: 20px;
+            border-top: 1px solid #e9ecef;
+            background: #f8f9fa;
+        }
+
+        /* Loading spinner */
+        .document-loading {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: var(--primary-color);
+        }
+        
+        .document-loading.spinning {
+            display: block;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         /* Mobile responsiveness */
@@ -769,13 +853,26 @@ function getDocumentSource($file_path) {
             }
             
             .document-modal-content {
-                width: 95%;
-                margin: 10% auto;
-                padding: 15px;
+                width: 98%;
+                height: 98vh;
+                margin: 1% auto;
             }
             
-            .document-viewer {
-                height: 60vh;
+            .modal-header {
+                padding: 15px 20px;
+            }
+            
+            .modal-title {
+                font-size: 18px;
+            }
+            
+            .document-actions {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .btn {
+                width: 100%;
             }
         }
 
@@ -895,10 +992,6 @@ function getDocumentSource($file_path) {
                         $student_id = $student['student_id'];
                         $verification_status = isset($verification_map[$student_id]) ? $verification_map[$student_id]['status'] : 'unverified';
                         $verification_data = isset($verification_map[$student_id]) ? $verification_map[$student_id] : null;
-                        
-                        // Check document sources
-                        $ghana_card_source = getDocumentSource($student['ghana_card_path']);
-                        $passport_source = getDocumentSource($student['passport_path']);
                     ?>
                         <div class="student-card <?php echo $verification_status; ?>">
                             <div class="student-name"><?php echo htmlspecialchars($student['student_name']); ?></div>
@@ -932,11 +1025,10 @@ function getDocumentSource($file_path) {
                                                 data-file-path="<?php echo htmlspecialchars($student['ghana_card_path']); ?>"
                                                 data-file-name="Ghana Card - <?php echo htmlspecialchars($student['student_name']); ?>"
                                                 data-student-id="<?php echo $student_id; ?>"
-                                                data-doc-type="ghana_card_path">
+                                                data-doc-type="ghana_card">
                                             <i class="fas fa-eye"></i> View
                                         </button>
-                                        <a href="view_document.php?file=<?php echo urlencode($student['ghana_card_path']); ?>&student_id=<?php echo $student_id; ?>&type=ghana_card" 
-                                           download 
+                                        <a href="view_document.php?file=<?php echo urlencode($student['ghana_card_path']); ?>&student_id=<?php echo $student_id; ?>&type=ghana_card&download=1" 
                                            class="btn btn-info btn-sm">
                                             <i class="fas fa-download"></i> Download
                                         </a>
@@ -949,11 +1041,10 @@ function getDocumentSource($file_path) {
                                                 data-file-path="<?php echo htmlspecialchars($student['passport_path']); ?>"
                                                 data-file-name="Passport - <?php echo htmlspecialchars($student['student_name']); ?>"
                                                 data-student-id="<?php echo $student_id; ?>"
-                                                data-doc-type="passport_path">
+                                                data-doc-type="passport">
                                             <i class="fas fa-eye"></i> View
                                         </button>
-                                        <a href="view_document.php?file=<?php echo urlencode($student['passport_path']); ?>&student_id=<?php echo $student_id; ?>&type=passport" 
-                                           download 
+                                        <a href="view_document.php?file=<?php echo urlencode($student['passport_path']); ?>&student_id=<?php echo $student_id; ?>&type=passport&download=1" 
                                            class="btn btn-info btn-sm">
                                             <i class="fas fa-download"></i> Download
                                         </a>
@@ -1047,12 +1138,20 @@ function getDocumentSource($file_path) {
 
     <!-- Document Viewer Modal -->
     <div id="documentModal" class="document-modal">
-        <span class="close-document-modal">&times;</span>
         <div class="document-modal-content">
-            <h3 id="modal-title">Document Viewer</h3>
-            <iframe id="document-viewer" class="document-viewer" src=""></iframe>
+            <div class="modal-header">
+                <h3 id="modal-title" class="modal-title">Document Viewer</h3>
+                <button class="close-document-modal">&times;</button>
+            </div>
+            <div class="document-viewer-container">
+                <div class="document-loading" id="documentLoading">
+                    <div class="spinner"></div>
+                    <p>Loading document...</p>
+                </div>
+                <iframe id="document-viewer" class="document-viewer" src="about:blank"></iframe>
+            </div>
             <div class="document-actions">
-                <a id="download-link" href="#" download class="btn btn-primary">
+                <a id="download-link" href="#" class="btn btn-primary">
                     <i class="fas fa-download"></i> Download Document
                 </a>
                 <button class="btn btn-danger close-document">
@@ -1099,6 +1198,7 @@ function getDocumentSource($file_path) {
         const modalTitle = document.getElementById('modal-title');
         const closeModalBtn = document.querySelector('.close-document-modal');
         const closeDocumentBtn = document.querySelector('.close-document');
+        const documentLoading = document.getElementById('documentLoading');
         
         // Open document in modal
         document.querySelectorAll('.view-document').forEach(button => {
@@ -1111,23 +1211,80 @@ function getDocumentSource($file_path) {
                 // Set modal title
                 modalTitle.textContent = fileName;
                 
-                // Set iframe source
+                // Show loading spinner
+                documentLoading.classList.add('spinning');
+                documentViewer.style.display = 'none';
+                
+                // Set iframe source - no download parameter for viewing
                 const viewerUrl = `view_document.php?file=${encodeURIComponent(filePath)}&student_id=${studentId}&type=${docType}`;
                 documentViewer.src = viewerUrl;
                 
-                // Set download link
-                downloadLink.href = viewerUrl;
-                downloadLink.setAttribute('download', filePath);
+                // Set download link - add download parameter
+                const downloadUrl = `view_document.php?file=${encodeURIComponent(filePath)}&student_id=${studentId}&type=${docType}&download=1`;
+                downloadLink.href = downloadUrl;
+                downloadLink.setAttribute('download', '');
                 
                 // Show modal
                 modal.style.display = 'block';
+                
+                // Hide loading spinner when iframe loads
+                documentViewer.onload = function() {
+                    documentLoading.classList.remove('spinning');
+                    documentViewer.style.display = 'block';
+                };
+                
+                // Handle iframe errors
+                documentViewer.onerror = function() {
+                    documentLoading.classList.remove('spinning');
+                    documentViewer.style.display = 'block';
+                    documentViewer.srcdoc = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <style>
+                                body { 
+                                    font-family: Arial, sans-serif; 
+                                    display: flex; 
+                                    justify-content: center; 
+                                    align-items: center; 
+                                    height: 100vh; 
+                                    margin: 0; 
+                                    background: #f8f9fa; 
+                                }
+                                .error-container { 
+                                    text-align: center; 
+                                    padding: 40px; 
+                                    background: white; 
+                                    border-radius: 8px; 
+                                    box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+                                }
+                                .error-icon { 
+                                    font-size: 48px; 
+                                    color: #dc3545; 
+                                    margin-bottom: 20px; 
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="error-container">
+                                <div class="error-icon">⚠️</div>
+                                <h2>Unable to Load Document</h2>
+                                <p>The document could not be loaded. Please try downloading the file instead.</p>
+                                <a href="${downloadUrl}" style="display: inline-block; padding: 10px 15px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; margin-top: 15px;">Download File</a>
+                            </div>
+                        </body>
+                        </html>
+                    `;
+                };
             });
         });
         
         // Close modal
         function closeDocumentModal() {
             modal.style.display = 'none';
-            documentViewer.src = '';
+            documentViewer.src = 'about:blank';
+            documentLoading.classList.remove('spinning');
+            documentViewer.style.display = 'block';
         }
         
         closeModalBtn.addEventListener('click', closeDocumentModal);
@@ -1136,6 +1293,13 @@ function getDocumentSource($file_path) {
         // Close modal when clicking outside content
         window.addEventListener('click', function(event) {
             if (event.target === modal) {
+                closeDocumentModal();
+            }
+        });
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && modal.style.display === 'block') {
                 closeDocumentModal();
             }
         });

@@ -33,21 +33,50 @@ $property_stmt = $pdo->prepare("
 $property_stmt->execute([$property_id]);
 $property = $property_stmt->fetch();
 
-// Fetch room details
+if (!$property) {
+    $_SESSION['error'] = "Property not found or not available.";
+    header("Location: index.php");
+    exit();
+}
+
+// CORRECTED: Fetch room details with proper NULL checks for cancelled_at
 $room_stmt = $pdo->prepare("
-    SELECT * FROM property_rooms 
-    WHERE id = ? AND property_id = ? 
-    AND levy_payment_status = 'approved' 
-    AND status = 'available'
-    AND current_occupancy < capacity
+    SELECT pr.*, 
+           -- Count active confirmed bookings (excluding cancelled)
+           (SELECT COUNT(*) 
+            FROM bookings b 
+            WHERE b.room_id = pr.id 
+            AND b.status IN ('confirmed', 'paid', 'cash_approved')
+            AND (b.cancelled_at IS NULL )
+           ) AS confirmed_bookings,
+           -- Count pending bookings
+           (SELECT COUNT(*) 
+            FROM bookings b 
+            WHERE b.room_id = pr.id 
+            AND b.status IN ('pending', 'pending_payment')
+            AND (b.cancelled_at IS NULL)
+           ) AS pending_bookings
+    FROM property_rooms pr 
+    WHERE pr.id = ? AND pr.property_id = ? 
+    AND pr.levy_payment_status = 'approved'
+    AND (pr.levy_expiry_date IS NULL OR pr.levy_expiry_date >= CURDATE())
 ");
 $room_stmt->execute([$room_id, $property_id]);
 $room = $room_stmt->fetch();
 
-// Validate room availability
-if (!$property || !$room) {
+// CORRECTED: Simplified availability validation
+if (!$room) {
+    $_SESSION['error'] = "The selected room is not available for booking.";
+    header("Location: ../properties/index.php");
+    exit();
+}
+
+// Calculate actual available spots
+$actual_available = max(0, $room['capacity'] - $room['confirmed_bookings'] - $room['pending_bookings']);
+
+if ($actual_available <= 0) {
     $_SESSION['error'] = "The selected room is no longer available for booking.";
-    header("Location: index.php");
+    header("Location: ../properties/index.php");
     exit();
 }
 
@@ -75,6 +104,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "Duration must be between 1 and 24 months.";
     }
     
+    // CORRECTED: Double-check room availability before creating booking with proper NULL checks
+    $availability_check = $pdo->prepare("
+        SELECT 
+            pr.capacity,
+            (SELECT COUNT(*) 
+             FROM bookings b 
+             WHERE b.room_id = pr.id 
+             AND b.status IN ('confirmed', 'paid', 'cash_approved')
+             AND (b.cancelled_at IS NULL )
+            ) AS confirmed_count,
+            (SELECT COUNT(*) 
+             FROM bookings b 
+             WHERE b.room_id = pr.id 
+             AND b.status IN ('pending', 'pending_payment')
+             AND (b.cancelled_at IS NULL )
+            ) AS pending_count
+        FROM property_rooms pr 
+        WHERE pr.id = ? AND pr.levy_payment_status = 'approved'
+    ");
+    $availability_check->execute([$room_id]);
+    $availability = $availability_check->fetch();
+    
+    if ($availability) {
+        $current_available = max(0, $availability['capacity'] - $availability['confirmed_count'] - $availability['pending_count']);
+        if ($current_available <= 0) {
+            $errors[] = "Sorry, this room was just booked by someone else. Please select another room.";
+        }
+    } else {
+        $errors[] = "Room availability could not be verified. Please try again.";
+    }
+    
     if (empty($errors)) {
         // Calculate end date
         $end_date = date('Y-m-d', strtotime("+$duration_months months", strtotime($start_date)));
@@ -88,8 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 INSERT INTO bookings (
                     user_id, property_id, room_id, 
                     start_date, end_date, duration_months, 
-                    special_requests, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+                    special_requests, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
             ");
             $booking_stmt->execute([
                 $student_id, $property_id, $room_id,
@@ -98,27 +158,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $booking_id = $pdo->lastInsertId();
             
-            // Update room occupancy
-            $occupancy_stmt = $pdo->prepare("
+            // CORRECTED: Update room current_occupancy based on confirmed bookings with proper NULL checks
+            $update_occupancy_stmt = $pdo->prepare("
                 UPDATE property_rooms 
-                SET current_occupancy = current_occupancy + 1 
-                WHERE id = ? AND current_occupancy < capacity
+                SET current_occupancy = (
+                    SELECT COUNT(*) 
+                    FROM bookings 
+                    WHERE room_id = ? 
+                    AND status IN ('confirmed', 'paid', 'cash_approved')
+                    AND (cancelled_at IS NULL)
+                ),
+                updated_at = NOW()
+                WHERE id = ?
             ");
-            $occupancy_stmt->execute([$room_id]);
+            $update_occupancy_stmt->execute([$room_id, $room_id]);
             
-            if ($occupancy_stmt->rowCount() === 0) {
-                throw new Exception("Room is no longer available");
-            }
+            // Update room status based on occupancy
+            $update_status_stmt = $pdo->prepare("
+                UPDATE property_rooms 
+                SET status = CASE 
+                    WHEN current_occupancy = 0 THEN 'available'
+                    WHEN current_occupancy >= capacity THEN 'occupied'
+                    ELSE 'occupied'
+                END
+                WHERE id = ?
+            ");
+            $update_status_stmt->execute([$room_id]);
             
             $pdo->commit();
             
             // Redirect to booking confirmation
-            $_SESSION['success'] = "Booking created successfully!";
+            $_SESSION['success'] = "Booking created successfully! Your booking is pending approval.";
             header("Location: details.php?id=$booking_id");
             exit();
+            
         } catch (Exception $e) {
             $pdo->rollBack();
             $errors[] = "Failed to create booking: " . $e->getMessage();
+            error_log("Booking error: " . $e->getMessage());
         }
     }
 }
@@ -129,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book Accommodation | Landlors&Tenant</title>
+    <title>Book Accommodation | Landlords&Tenant</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -423,6 +500,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #0f5132;
         }
 
+        .limited {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .full {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
         .progress-container {
             margin: 0.75rem 0;
         }
@@ -485,6 +572,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: var(--primary-color);
         }
 
+        .cancelled-spots-info {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: var(--border-radius);
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            font-size: 0.85rem;
+        }
+
+        .cancelled-spots-info i {
+            color: var(--info-color);
+            margin-right: 0.5rem;
+        }
+
         @media (max-width: 576px) {
             .booking-steps {
                 flex-direction: column;
@@ -527,8 +628,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <header class="header">
         <div class="container">
             <div class="d-flex justify-content-between align-items-center">
-                <a href="index.php" class="text-white">
-                    <i class="fas fa-arrow-left me-2"></i> Back to Properties
+                <a href="../search/index.php" class="text-white">
+                    <i class="fas fa-arrow-left me-2"></i> Back to Find Accommodation
                 </a>
                 <h1 class="h4 mb-0">Book Accommodation</h1>
                 <div></div> <!-- For alignment -->
@@ -569,9 +670,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </ul>
             </div>
         <?php endif; ?>
-
-        <!-- Virtual Tours Section -->
-        <?php include 'property_video_viewer.php'; ?>
 
         <div class="booking-container">
             <!-- Property Details -->
@@ -661,20 +759,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <i class="fas fa-<?= $gender_icon ?>"></i> <?= ucfirst($room['gender']) ?>
                                 </span>
                             </h4>
-                            <span class="availability-badge available">
-                                Available
+                            <?php
+                            // Determine availability badge class
+                            if ($actual_available == 0) {
+                                $availability_class = "full";
+                                $availability_text = "Fully Booked";
+                            } elseif ($actual_available <= 2) {
+                                $availability_class = "limited";
+                                $availability_text = "Limited Availability";
+                            } else {
+                                $availability_class = "available";
+                                $availability_text = "Available";
+                            }
+                            ?>
+                            <span class="availability-badge <?= $availability_class ?>">
+                                <?= $availability_text ?>
                             </span>
                         </div>
                         
                         <div class="progress-container">
                             <div class="d-flex justify-content-between mb-1">
-                                <small>Occupancy: <?= $room['current_occupancy'] ?>/<?= $room['capacity'] ?></small>
-                                <small><?= number_format(($room['current_occupancy'] / $room['capacity']) * 100, 0) ?>%</small>
+                                <small>Confirmed Occupants: <?= $room['confirmed_bookings'] ?>/<?= $room['capacity'] ?></small>
+                                <small><?= number_format(($room['confirmed_bookings'] / $room['capacity']) * 100, 0) ?>%</small>
                             </div>
                             <div class="progress">
                                 <div class="progress-bar" role="progressbar" 
-                                    style="width: <?= ($room['current_occupancy'] / $room['capacity']) * 100 ?>%;" 
-                                    aria-valuenow="<?= ($room['current_occupancy'] / $room['capacity']) * 100 ?>" 
+                                    style="width: <?= ($room['confirmed_bookings'] / $room['capacity']) * 100 ?>%;" 
+                                    aria-valuenow="<?= ($room['confirmed_bookings'] / $room['capacity']) * 100 ?>" 
                                     aria-valuemin="0" 
                                     aria-valuemax="100"></div>
                             </div>
@@ -685,8 +796,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 Capacity: <?= $room['capacity'] ?> tenants
                             </div>
                             <div class="fw-medium text-success">
-                                Spots Available: <?= $room['capacity'] - $room['current_occupancy'] ?>
+                                Available Spots: <?= $actual_available ?>
                             </div>
+                        </div>
+                        
+                        <?php if ($room['pending_bookings'] > 0): ?>
+                            <div class="mt-2">
+                                <small class="text-warning">
+                                    <i class="fas fa-clock"></i> <?= $room['pending_bookings'] ?> pending booking(s) - these spots are temporarily reserved
+                                </small>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <!-- Cancelled spots information -->
+                        <div class="cancelled-spots-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Note:</strong> Cancelled bookings automatically free up spots for new bookings.
                         </div>
                     </div>
                     
@@ -716,7 +841,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ?>
                             </div>
                             <span class="text-muted">
-                                (<?= $property['average_rating'] ?> average rating)
+                                (<?= number_format($property['average_rating'], 1) ?> average rating)
                             </span>
                         </div>
                     <?php endif; ?>
@@ -745,11 +870,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <option value="9">9 Months</option>
                             <option value="12">12 Months</option>
                             <option value="24">24 Months</option>
-                            
                         </select>
                         <div class="form-text">Select how long you plan to stay</div>
                     </div>
                     
+                    <div class="mb-3">
+                        <label for="special_requests" class="form-label">Special Requests (Optional)</label>
+                        <textarea class="form-control" id="special_requests" name="special_requests" 
+                                  rows="3" placeholder="Any special requirements or requests..."><?= htmlspecialchars($_POST['special_requests'] ?? '') ?></textarea>
+                    </div>
                     
                     <div class="price-summary">
                         <h5>Price Summary</h5>
@@ -777,14 +906,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-calendar-check me-2"></i> Confirm Booking
                     </button>
-
-
                 </form>
             </div>
         </div>
     </main>
-
-
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -816,6 +941,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const today = new Date();
         const minDate = today.toISOString().split('T')[0];
         document.getElementById('start_date').min = minDate;
+        
+        // Form submission confirmation
+        document.getElementById('bookingForm').addEventListener('submit', function(e) {
+            const startDate = document.getElementById('start_date').value;
+            if (!startDate) {
+                e.preventDefault();
+                alert('Please select a move-in date');
+                return;
+            }
+            
+            // Optional: Add confirmation dialog
+            if (!confirm('Are you sure you want to book this room? This action will reserve a spot for you.')) {
+                e.preventDefault();
+            }
+        });
     </script>
 </body>
 </html>

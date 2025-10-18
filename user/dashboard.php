@@ -1132,6 +1132,7 @@ $profile_pic_path = getProfilePicturePath($student['profile_picture'] ?? '');
                     <li><a href="sms/"><i class="fas fa-sms"></i> <span class="menu-text">SMS Settings</span></a></li>
                     <li><a href="uploadfile.php"><i class="fas fa-file"></i> <span class="menu-text">Upload Document</span></a></li>
                     <li><a href="tenancy_agreements_document.php"><i class="fas fa-check"></i> <span class="menu-text">Tenancy Agreements</span></a></li>
+                   
                 </ul>
             </div>
         </div>

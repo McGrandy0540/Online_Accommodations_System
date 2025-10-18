@@ -703,7 +703,7 @@ $stats = getStatistics($pdo);
     <div class="container">
         <div class="header">
             <div class="header-content">
-                <a href="dashboard.php" class="back-button">
+                <a href="../dashboard.php" class="back-button">
                     <i class="fas fa-arrow-left"></i> Back to Dashboard
                 </a>
                 <h1 class="page-title">Data Export Center</h1>

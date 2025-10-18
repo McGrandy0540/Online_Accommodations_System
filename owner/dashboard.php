@@ -959,7 +959,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     <!-- Header -->
     <header class="main-header">
         <div class="header-container">
-            <a href="../" class="logo">
+            <a href="dashboard.php" class="logo">
                 <img src="../assets/images/landlords-logo.png" alt="landlords&tenants Logo">
                 <span>Landlords&Tenants</span>
             </a>
@@ -977,7 +977,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                         <span class="d-none d-md-inline"><?= htmlspecialchars($owner['username']) ?></span>
                     </div>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
+                        <li><a class="dropdown-item" href="settings.php"><i class="fas fa-user me-2"></i>Profile</a></li>
                         <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
                         <li><hr class="dropdown-divider"></li>
                        <li>

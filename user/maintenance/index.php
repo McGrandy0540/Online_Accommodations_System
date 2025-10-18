@@ -826,8 +826,8 @@ if (!in_array($current_tab, $allowed_tabs)) {
                 <li><a href="../search/"><i class="fas fa-search"></i> <span class="menu-text">Find Accommodation</span></a></li>
                 <li><a href="../bookings/"><i class="fas fa-calendar-alt"></i> <span class="menu-text">My Bookings</span></a></li>
                 <li><a href="../payments/"><i class="fas fa-wallet"></i> <span class="menu-text">Payments</span></a></li>
-                <li><a href="../reviews/" class="active"><i class="fas fa-star"></i> <span class="menu-text">Reviews</span></a></li>
-                <li><a href="../maintenance/"><i class="fas fa-tools"></i> <span class="menu-text">Maintenance</span></a></li>
+                <li><a href="../reviews/" ><i class="fas fa-star"></i> <span class="menu-text">Reviews</span></a></li>
+                <li><a href="../maintenance/" class="active"><i class="fas fa-tools"></i> <span class="menu-text">Maintenance</span></a></li>
                 <li><a href="../profile/index.php"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
                 <li><a href="../notification/"><i class="fas fa-bell"></i> <span class="menu-text">Notifications</span></a></li>
             </ul>

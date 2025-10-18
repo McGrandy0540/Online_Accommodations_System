@@ -95,8 +95,8 @@ $failed_payments = array_filter($payments, fn($p) => $p['status'] === 'failed');
             <h1 class="text-3xl font-bold text-gray-800">
                 <i class="fas fa-money-bill-wave mr-2"></i>Room Levy Payments
             </h1>
-            <a href="make_payment.php" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg">
-                <i class="fas fa-plus mr-2"></i>New Payment
+            <a href="index.php" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg">
+                <i class="fas fa-arrow-left mr-2"></i>Back
             </a>
         </div>
 

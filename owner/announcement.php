@@ -20,10 +20,20 @@ $pdo = Database::getInstance();
 require_once __DIR__ . '../../includes/property_owner_emailService.php';
 require_once __DIR__ . '../../config/email.php';
 
+// Get current owner data
+$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->execute([$owner_id]);
+$owner = $stmt->fetch();
+
+if (!$owner) {
+    header('Location: ../auth/login.php');
+    exit();
+}
+
 // Get profile picture path
 function getProfilePicturePath($path) {
     if (empty($path)) {
-        return '../../assets/images/default-profile.png';
+        return null;
     }
     
     if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
@@ -194,6 +204,8 @@ $all_rooms_stmt = $pdo->prepare("SELECT pr.id, pr.room_number, p.id as property_
                                 WHERE p.owner_id = ?");
 $all_rooms_stmt->execute([$owner_id]);
 $all_rooms = $all_rooms_stmt->fetchAll();
+
+$profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
 ?>
 
 <!DOCTYPE html>
@@ -697,13 +709,16 @@ $all_rooms = $all_rooms_stmt->fetchAll();
     <div class="dashboard-container">
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <img src="<?= htmlspecialchars($profile_pic_path) ?>" alt="Profile Picture">
-                <div>
-                    <h3><?= htmlspecialchars($_SESSION['username']) ?></h3>
-                    <small>Property Owner</small>
-                </div>
-            </div>
+                    <div class="user-profile dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <?php if (!empty($profile_pic_path)): ?>
+                            <img src="<?= htmlspecialchars($profile_pic_path) ?>" alt="User Profile">
+                        <?php else: ?>
+                            <div class="avatar-placeholder">
+                                <?= substr($owner['username'], 0, 1) ?>
+                            </div>
+                        <?php endif; ?>
+                        <span class="d-none d-md-inline"><?= htmlspecialchars($owner['username']) ?></span>
+                    </div>
             <div class="sidebar-menu">
                 <ul>
                     <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
@@ -712,13 +727,14 @@ $all_rooms = $all_rooms_stmt->fetchAll();
                     <li><a href="owner/payments/"><i class="fas fa-money-bill-wave"></i> Payments</a></li>
                     <li><a href="announcement.php" class="active"><i class="fa-solid fa-bullhorn"></i> Announcements</a></li>
                     <li><a href="settings.php"><i class="fas fa-cog"></i> Settings</a></li>
-                    <li>
-                        <form action="../../auth/logout.php" method="POST">
-                            <button type="submit" class="btn btn-link text-start w-100 p-0" style="color: rgba(255, 255, 255, 0.8);">
-                                <i class="fas fa-sign-out-alt"></i> Logout
-                            </button>
-                        </form>
-                    </li>
+                       <li>
+                         <form action="logout.php" method="POST">
+                          <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                          <button type="submit" class="dropdown-item">
+                           <i class="fas fa-sign-out-alt "></i> Logout
+                          </button>
+                         </form>
+                      </li>
                 </ul>
             </div>
         </div>
@@ -787,7 +803,7 @@ $all_rooms = $all_rooms_stmt->fetchAll();
                                     <option value="my_properties">My Properties (All Tenants)</option>
                                     <option value="specific_property">Specific Property</option>
                                     <option value="specific_room">Specific Room</option>
-                                    <option value="specific_student">Specific Student</option>
+                                    <option value="specific_student">Specific Tenant</option>
                                 </select>
                             </div>
                             
@@ -811,7 +827,7 @@ $all_rooms = $all_rooms_stmt->fetchAll();
                             </div>
                             
                             <div id="specific_student_option" class="target-option form-group">
-                                <label for="specific_student">Select Student</label>
+                                <label for="specific_student">Select Tenant</label>
                                 <select id="specific_student" name="specific_student" class="form-control">
                                     <?php foreach ($booked_rooms as $room): ?>
                                         <option value="<?= $room['user_id'] ?>"><?= htmlspecialchars($room['username']) ?> (Room <?= $room['room_number'] ?>)</option>

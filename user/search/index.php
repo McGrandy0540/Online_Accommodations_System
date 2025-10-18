@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__. '../../../config/database.php';
+require_once __DIR__. '../../bookings/booking_functions.php';
 
 // Redirect if not authenticated
 if (!isset($_SESSION['user_id']) || $_SESSION['status'] !== 'student') {
@@ -11,69 +12,79 @@ if (!isset($_SESSION['user_id']) || $_SESSION['status'] !== 'student') {
 $pdo = Database::getInstance();
 $student_id = $_SESSION['user_id'];
 
+// Get student gender for room matching
+$student_stmt = $pdo->prepare("SELECT sex FROM users WHERE id = ?");
+$student_stmt->execute([$student_id]);
+$student = $student_stmt->fetch();
+
 // Get filter options from database
 $categories = $pdo->query("SELECT * FROM categories")->fetchAll();
 $locations = $pdo->query("SELECT DISTINCT location FROM property WHERE approved = 1")->fetchAll(PDO::FETCH_COLUMN);
 
-// Default filters
+// Default filters - show ALL properties initially
 $filters = [
-    'min_price' => $_GET['min_price'] ?? 1500,
-    'max_price' => $_GET['max_price'] ?? 2500,
+    'min_price' => $_GET['min_price'] ?? '',
+    'max_price' => $_GET['max_price'] ?? '',
     'category' => $_GET['category'] ?? '',
     'location' => $_GET['location'] ?? '',
     'bedrooms' => $_GET['bedrooms'] ?? '',
-    'gender' => $_GET['gender'] ?? '',
+    'gender' => $_GET['gender'] ?? $student['sex'] ?? '',
     'amenities' => isset($_GET['amenities']) ? (array)$_GET['amenities'] : []
 ];
 
-
-
-// Query to get approved properties
+// Query to get ALL approved properties initially
 $query = "SELECT 
             p.*, 
+            c.name as category_name,
+            c.id as category_id,
             (SELECT image_url FROM property_images WHERE property_id = p.id LIMIT 1) as thumbnail,
             (SELECT AVG(rating) FROM reviews WHERE property_id = p.id) as average_rating,
             p.price as per_person_price
           FROM property p
+          JOIN categories c ON p.category_id = c.id
           WHERE p.approved = 1 AND p.deleted = 0";
 
-// Apply filters
+// Apply filters only if they are set
 $params = [];
+$hasFilters = false;
+
 if (!empty($filters['category'])) {
     $query .= " AND p.category_id = ?";
     $params[] = $filters['category'];
+    $hasFilters = true;
 }
 if (!empty($filters['location'])) {
     $query .= " AND p.location LIKE ?";
     $params[] = '%' . $filters['location'] . '%';
+    $hasFilters = true;
 }
 if (!empty($filters['bedrooms'])) {
     $query .= " AND p.bedrooms >= ?";
     $params[] = $filters['bedrooms'];
+    $hasFilters = true;
 }
 if (!empty($filters['min_price'])) {
     $query .= " AND p.price >= ?";
     $params[] = $filters['min_price'];
+    $hasFilters = true;
 }
 if (!empty($filters['max_price'])) {
     $query .= " AND p.price <= ?";
     $params[] = $filters['max_price'];
+    $hasFilters = true;
 }
 if (!empty($filters['gender'])) {
     $query .= " AND EXISTS (
         SELECT 1 FROM property_rooms pr 
         WHERE pr.property_id = p.id 
-        AND pr.gender = ? 
+        AND (pr.gender = ? OR pr.gender IS NULL)
         AND pr.status = 'available'
         AND pr.levy_payment_status = 'approved'
-        AND pr.capacity > pr.current_occupancy + (
-            SELECT COUNT(*) 
-            FROM bookings b 
-            WHERE b.room_id = pr.id 
-            AND b.status IN ('pending', 'confirmed', 'paid')
-        )
+        AND (pr.levy_expiry_date IS NULL OR pr.levy_expiry_date >= CURDATE())
+        AND pr.available_spots > 0
     )";
     $params[] = $filters['gender'];
+    $hasFilters = true;
 }
 
 // Add amenities filter
@@ -86,6 +97,7 @@ if (!empty($filters['amenities'])) {
         AND pf.feature_name IN ($placeholders)
     )";
     $params = array_merge($params, $filters['amenities']);
+    $hasFilters = true;
 }
 
 // Add sorting
@@ -107,7 +119,20 @@ switch ($sort) {
 // Execute query
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
-$properties = $stmt->fetchAll();
+$allProperties = $stmt->fetchAll();
+
+// Group properties by category with custom ordering (Apartment first, then Hostel, then others)
+$groupedProperties = [];
+$categoryOrder = ['Apartment' => 1, 'Hostel' => 2]; // Custom order
+
+foreach ($allProperties as $property) {
+    $categoryName = $property['category_name'];
+    $order = $categoryOrder[$categoryName] ?? 999; // Default high number for other categories
+    $groupedProperties[$order][$categoryName][] = $property;
+}
+
+// Sort by our custom order
+ksort($groupedProperties);
 
 // Get amenities for filter options
 $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")->fetchAll(PDO::FETCH_COLUMN);
@@ -159,16 +184,16 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         }
 
         .search-container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 0 15px;
         }
 
         .search-main {
             display: grid;
-            grid-template-columns: 300px 1fr;
-            gap: 1.5rem;
-            max-width: 1200px;
+            grid-template-columns: 1fr 350px;
+            gap: 2rem;
+            max-width: 1400px;
             margin: 2rem auto;
             padding: 0 15px;
         }
@@ -177,10 +202,15 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             background: white;
             border-radius: var(--border-radius);
             box-shadow: var(--card-shadow);
-            padding: 1.25rem;
+            padding: 1.5rem;
             height: fit-content;
             position: sticky;
-            top: 80px;
+            top: 100px;
+            order: 2;
+        }
+
+        .results-main {
+            order: 1;
         }
 
         .filter-section {
@@ -253,7 +283,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         .results-container {
             display: flex;
             flex-direction: column;
-            gap: 1.5rem;
+            gap: 2rem;
         }
 
         .results-header {
@@ -261,25 +291,26 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             justify-content: space-between;
             align-items: center;
             background: white;
-            padding: 1rem;
+            padding: 1.5rem;
             border-radius: var(--border-radius);
             box-shadow: var(--card-shadow);
         }
 
         .results-count {
             font-weight: 500;
+            font-size: 1.1rem;
         }
 
         .sort-dropdown .dropdown-toggle {
             border: 1px solid #ddd;
             border-radius: var(--border-radius);
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1rem;
         }
 
         .property-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 1.25rem;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
         }
 
         .property-card {
@@ -296,7 +327,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         }
 
         .property-image {
-            height: 200px;
+            height: 220px;
             position: relative;
             overflow: hidden;
         }
@@ -318,7 +349,20 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             left: 10px;
             background: var(--primary-color);
             color: white;
-            padding: 0.25rem 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            z-index: 10;
+        }
+
+        .category-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--info-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
             border-radius: 20px;
             font-size: 0.8rem;
             font-weight: 500;
@@ -326,11 +370,11 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         }
 
         .property-content {
-            padding: 1.25rem;
+            padding: 1.5rem;
         }
 
         .property-price {
-            font-size: 1.25rem;
+            font-size: 1.5rem;
             font-weight: 700;
             color: var(--primary-color);
             margin-bottom: 0.5rem;
@@ -346,14 +390,15 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             font-weight: 600;
             margin-bottom: 0.5rem;
             color: var(--secondary-color);
+            font-size: 1.3rem;
         }
 
         .property-location {
             display: flex;
             align-items: center;
             color: #6c757d;
-            margin-bottom: 0.75rem;
-            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            font-size: 1rem;
         }
 
         .property-location i {
@@ -400,7 +445,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            padding: 0.5rem;
+            padding: 0.75rem;
             border-radius: var(--border-radius);
             font-weight: 500;
             transition: all 0.3s ease;
@@ -429,7 +474,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         }
 
         #map-view {
-            height: 400px;
+            height: 500px;
             border-radius: var(--border-radius);
             box-shadow: var(--card-shadow);
             display: none;
@@ -443,11 +488,12 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         }
 
         .view-toggle-btn {
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1.5rem;
             background: white;
             border: none;
             cursor: pointer;
             transition: all 0.3s ease;
+            font-weight: 500;
         }
 
         .view-toggle-btn.active {
@@ -497,11 +543,11 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
 
         .levy-badge {
             position: absolute;
-            top: 10px;
+            top: 45px;
             right: 10px;
             background: var(--success-color);
             color: white;
-            padding: 0.25rem 0.5rem;
+            padding: 0.25rem 0.75rem;
             border-radius: 20px;
             font-size: 0.7rem;
             font-weight: 500;
@@ -512,7 +558,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         }
         
         .property-image .carousel {
-            height: 200px;
+            height: 220px;
         }
         
         .property-image .carousel-inner,
@@ -526,8 +572,8 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         .carousel-control-prev,
         .carousel-control-next {
             background-color: rgba(0,0,0,0.3);
-            width: 30px;
-            height: 30px;
+            width: 35px;
+            height: 35px;
             border-radius: 50%;
             top: 50%;
             transform: translateY(-50%);
@@ -536,7 +582,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         .welcome-banner {
             background: linear-gradient(135deg, #3498db, #2c3e50);
             color: white;
-            padding: 1.5rem;
+            padding: 2rem;
             border-radius: var(--border-radius);
             margin-bottom: 2rem;
             box-shadow: var(--box-shadow);
@@ -547,11 +593,13 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
         .welcome-banner h2 {
             font-weight: 700;
             margin-bottom: 0.5rem;
+            font-size: 2rem;
         }
         
         .welcome-banner p {
             max-width: 800px;
             opacity: 0.9;
+            font-size: 1.1rem;
         }
         
         .banner-icon {
@@ -559,10 +607,60 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             right: 20px;
             top: 50%;
             transform: translateY(-50%);
-            font-size: 4rem;
+            font-size: 5rem;
             opacity: 0.2;
         }
-        
+
+        .category-section {
+            margin-bottom: 3rem;
+        }
+
+        .category-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            margin-bottom: 1.5rem;
+            box-shadow: var(--box-shadow);
+        }
+
+        .category-header h2 {
+            font-weight: 700;
+            margin: 0;
+            font-size: 1.8rem;
+        }
+
+        .category-count {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin-top: 0.5rem;
+        }
+
+        .no-properties {
+            text-align: center;
+            padding: 3rem;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+        }
+
+        .no-properties i {
+            font-size: 4rem;
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+
+        .filter-indicator {
+            background: var(--warning-color);
+            color: var(--dark-color);
+            padding: 0.5rem 1rem;
+            border-radius: var(--border-radius);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
         .capacity-info {
             background-color: #e3f2fd;
             border-left: 3px solid var(--primary-color);
@@ -620,37 +718,6 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             color: #721c24;
         }
         
-        .progress-container {
-            margin: 0.5rem 0;
-        }
-        
-        .progress {
-            height: 8px;
-            border-radius: 4px;
-        }
-        
-        .room-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 0.5rem;
-        }
-        
-        .per-person-price {
-            font-weight: 600;
-            color: var(--primary-color);
-        }
-        
-        .capacity-stats {
-            font-size: 0.85rem;
-            color: #6c757d;
-        }
-        
-        .btn-sm {
-            padding: 0.25rem 0.75rem;
-            font-size: 0.8rem;
-        }
-        
         .gender-badge {
             display: inline-block;
             padding: 0.2rem 0.5rem;
@@ -668,103 +735,40 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             background-color: #f8d7da;
             color: #721c24;
         }
-        
-        .room-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
+
+        /* Enhanced Mobile Responsiveness */
+        @media (max-width: 1200px) {
+            .search-main {
+                grid-template-columns: 1fr 320px;
+                gap: 1.5rem;
+            }
+            
+            .property-grid {
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            }
         }
-        
-        .room-table th {
-            background-color: #e9ecef;
-            padding: 0.5rem;
-            text-align: left;
-            font-weight: 600;
-            border: 1px solid #dee2e6;
-        }
-        
-        .room-table td {
-            padding: 0.5rem;
-            border: 1px solid #dee2e6;
-        }
-        
-        .room-table tr:nth-child(even) {
-            background-color: #f8f9fa;
-        }
-        
-        .room-table tr:hover {
-            background-color: #e9ecef;
-        }
-        
-        .booking-count {
-            display: inline-block;
-            background-color: var(--info-color);
-            color: white;
-            padding: 0.15rem 0.5rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            margin-left: 0.5rem;
-        }
-        
-        .room-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .available-count {
-            font-weight: 600;
-        }
-        
-        .property-summary {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        
-        .property-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .status-badge {
-            padding: 0.25rem 0.5rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-        
-        .available-badge {
-            background-color: #d1e7dd;
-            color: #0f5132;
-        }
-        
-        .full-badge {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        
+
         @media (max-width: 992px) {
             .search-main {
                 grid-template-columns: 1fr;
+                gap: 1rem;
             }
 
             .filter-sidebar {
                 position: fixed;
                 top: 0;
-                left: -100%;
+                right: -100%;
                 width: 90%;
                 max-width: 400px;
                 height: 100vh;
                 z-index: 1100;
                 overflow-y: auto;
-                transition: left 0.3s ease;
+                transition: right 0.3s ease;
+                box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
             }
 
             .filter-sidebar.active {
-                left: 0;
+                right: 0;
             }
 
             .mobile-filter-btn {
@@ -786,9 +790,21 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             .sort-dropdown .dropdown-toggle {
                 width: 100%;
             }
+
+            .welcome-banner {
+                padding: 1.5rem;
+            }
+            
+            .welcome-banner h2 {
+                font-size: 1.6rem;
+            }
+            
+            .banner-icon {
+                font-size: 4rem;
+            }
         }
 
-        @media (max-width: 576px) {
+        @media (max-width: 768px) {
             .property-grid {
                 grid-template-columns: 1fr;
             }
@@ -796,26 +812,94 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             .property-actions {
                 flex-direction: column;
             }
-            
-            .room-footer {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0.5rem;
+
+            .view-toggle-btn {
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+            }
+
+            .category-header {
+                padding: 1rem;
             }
             
-            .property-summary {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0.5rem;
+            .category-header h2 {
+                font-size: 1.5rem;
+            }
+
+            .property-image {
+                height: 200px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .search-container {
+                padding: 0 10px;
+            }
+
+            .search-main {
+                padding: 0 10px;
+                margin: 1rem auto;
+            }
+
+            .welcome-banner {
+                padding: 1rem;
+                margin-bottom: 1rem;
             }
             
-            .room-table {
-                font-size: 0.8rem;
+            .welcome-banner h2 {
+                font-size: 1.4rem;
             }
             
-            .room-table th, 
-            .room-table td {
-                padding: 0.3rem;
+            .welcome-banner p {
+                font-size: 1rem;
+            }
+            
+            .banner-icon {
+                font-size: 3rem;
+                right: 10px;
+            }
+
+            .results-header {
+                padding: 1rem;
+            }
+
+            .property-content {
+                padding: 1rem;
+            }
+
+            .property-title {
+                font-size: 1.2rem;
+            }
+
+            .property-price {
+                font-size: 1.3rem;
+            }
+
+            .filter-sidebar {
+                width: 95%;
+                max-width: none;
+            }
+
+            .mobile-filter-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 1.2rem;
+                bottom: 15px;
+                right: 15px;
+            }
+        }
+
+        .mobile-only {
+            display: none;
+        }
+
+        @media (max-width: 992px) {
+            .mobile-only {
+                display: block;
+            }
+            
+            .desktop-only {
+                display: none;
             }
         }
     </style>
@@ -825,8 +909,10 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
     <header class="search-header">
         <div class="search-container">
             <div class="d-flex justify-content-between align-items-center">
-                <a href="../dashboard.php" class="text-white">
-                    <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
+                <a href="../dashboard.php" class="text-white text-decoration-none d-flex align-items-center">
+                    <i class="fas fa-arrow-left me-2"></i> 
+                    <span class="mobile-only">Back</span>
+                    <span class="desktop-only">Back to Dashboard</span>
                 </a>
                 <h1 class="h4 mb-0">Find Accommodation</h1>
                 <div class="d-flex align-items-center">
@@ -835,7 +921,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                     </button>
                     <div class="dropdown">
                         <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="sortDropdown" data-bs-toggle="dropdown">
-                            <i class="fas fa-sort me-1"></i> Sort
+                            <i class="fas fa-sort me-1"></i> <span class="desktop-only">Sort</span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="?<?= http_build_query(array_merge($_GET, ['sort' => 'newest'])) ?>">Newest First</a></li>
@@ -851,11 +937,242 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
 
     <!-- Main Content -->
     <main class="search-main">
-        <!-- Filter Sidebar -->
+        <!-- Results Section -->
+        <section class="results-main">
+            <div class="welcome-banner">
+                <h2>Find Your Perfect Accommodation</h2>
+                <p>Browse through all available properties. Use filters to narrow down your search.</p>
+                <i class="fas fa-home banner-icon"></i>
+            </div>
+            
+            <?php if ($hasFilters): ?>
+                <div class="filter-indicator">
+                    <i class="fas fa-filter"></i>
+                    <span>Filters Applied - <a href="index.php" class="text-dark fw-bold">Clear All</a></span>
+                </div>
+            <?php endif; ?>
+            
+            <div class="results-header">
+                <div class="results-count">
+                    <?= count($allProperties) ?> Properties Available
+                </div>
+                <div class="view-toggle">
+                    <button class="view-toggle-btn active" id="listViewBtn">
+                        <i class="fas fa-list"></i> <span class="desktop-only">List View</span>
+                    </button>
+                    <button class="view-toggle-btn" id="mapViewBtn">
+                        <i class="fas fa-map"></i> <span class="desktop-only">Map View</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Map View (Hidden by default) -->
+            <div id="map-view"></div>
+
+            <!-- List View -->
+            <div id="list-view">
+                <?php if (empty($allProperties)): ?>
+                    <div class="no-properties">
+                        <i class="fas fa-home"></i>
+                        <h3>No Properties Found</h3>
+                        <p class="text-muted">Try adjusting your search filters or check back later for new listings.</p>
+                        <a href="index.php" class="btn btn-primary mt-3">
+                            <i class="fas fa-redo me-2"></i> Reset Filters
+                        </a>
+                    </div>
+                <?php else: ?>
+                    <!-- Group properties by category -->
+                    <?php foreach ($groupedProperties as $categoryGroup): ?>
+                        <?php foreach ($categoryGroup as $categoryName => $properties): ?>
+                            <div class="category-section">
+                                <div class="category-header">
+                                    <h2><?= htmlspecialchars($categoryName) ?></h2>
+                                    <div class="category-count"><?= count($properties) ?> Properties</div>
+                                </div>
+                                
+                                <div class="property-grid">
+                                    <?php foreach ($properties as $property): 
+                                        // Get images and room details
+                                        $image_query = "SELECT image_url FROM property_images WHERE property_id = ?";
+                                        $image_stmt = $pdo->prepare($image_query);
+                                        $image_stmt->execute([$property['id']]);
+                                        $images = $image_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                        
+                                        $room_query = "SELECT pr.*, 
+                                                       (SELECT COUNT(*) 
+                                                        FROM bookings b 
+                                                        WHERE b.room_id = pr.id 
+                                                        AND b.status IN ('pending', 'pending_payment')
+                                                        AND b.cancelled_at IS NULL
+                                                       ) AS pending_bookings
+                                                       FROM property_rooms pr 
+                                                       WHERE pr.property_id = ? 
+                                                       AND pr.levy_payment_status = 'approved'
+                                                       AND (pr.levy_expiry_date IS NULL OR pr.levy_expiry_date >= CURDATE())
+                                                       ORDER BY pr.room_number ASC";
+                                        $room_stmt = $pdo->prepare($room_query);
+                                        $room_stmt->execute([$property['id']]);
+                                        $rooms = $room_stmt->fetchAll();
+                                        
+                                        $total_available_spots = 0;
+                                        $total_confirmed_bookings = 0;
+                                        $total_pending_bookings = 0;
+
+                                        foreach ($rooms as $room) {
+                                            $available_spots = $room['available_spots'];
+                                            $total_available_spots += max(0, $available_spots);
+                                            $total_confirmed_bookings += $room['current_occupancy'];
+                                            $total_pending_bookings += $room['pending_bookings'];
+                                        }
+                                    ?>
+                                        <div class="property-card">
+                                            <div class="property-image">
+                                                <div id="carousel-<?= $property['id'] ?>" class="carousel slide" data-bs-ride="carousel">
+                                                    <div class="carousel-inner">
+                                                        <?php if (!empty($images)): ?>
+                                                            <?php foreach ($images as $index => $image): ?>
+                                                                <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
+                                                                    <img src="../../uploads/<?= htmlspecialchars($image['image_url']) ?>" 
+                                                                         class="d-block w-100" 
+                                                                         alt="Property image">
+                                                                </div>
+                                                            <?php endforeach; ?>
+                                                        <?php else: ?>
+                                                            <div class="carousel-item active">
+                                                                <img src="../../assets/images/default-property.jpg" 
+                                                                     class="d-block w-100" 
+                                                                     alt="Default property image">
+                                                            </div>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <?php if (count($images) > 1): ?>
+                                                        <button class="carousel-control-prev" type="button" 
+                                                                data-bs-target="#carousel-<?= $property['id'] ?>" 
+                                                                data-bs-slide="prev">
+                                                            <span class="carousel-control-prev-icon"></span>
+                                                        </button>
+                                                        <button class="carousel-control-next" type="button" 
+                                                                data-bs-target="#carousel-<?= $property['id'] ?>" 
+                                                                data-bs-slide="next">
+                                                            <span class="carousel-control-next-icon"></span>
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <span class="property-badge">
+                                                    <?= htmlspecialchars($property['status']) ?>
+                                                </span>
+                                                <span class="category-badge">
+                                                    <?= htmlspecialchars($property['category_name']) ?>
+                                                </span>
+                                                <span class="levy-badge" title="Levy payment approved">
+                                                    <i class="fas fa-check-circle"></i> Levy Paid
+                                                </span>
+                                            </div>
+                                            
+                                            <div class="property-content">
+                                                <div class="property-price">
+                                                    GHS <?= number_format($property['per_person_price'], 2) ?> 
+                                                    <span>/year (per Tenant)</span>
+                                                </div>
+                                                
+                                                <h3 class="property-title">
+                                                    <a href="details.php?id=<?= $property['id'] ?>" class="text-decoration-none">
+                                                        <?= htmlspecialchars($property['property_name']) ?>
+                                                    </a>
+                                                </h3>
+                                                
+                                                <div class="property-location">
+                                                    <i class="fas fa-map-marker-alt"></i>
+                                                    <?= htmlspecialchars($property['location']) ?>
+                                                </div>
+                                                
+                                                <div class="capacity-info">
+                                                    <h5>Availability Summary</h5>
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <span><strong><?= $total_available_spots ?></strong> spots available</span>
+                                                        <span><strong><?= $total_confirmed_bookings ?></strong> confirmed bookings</span>
+                                                        <?php if ($total_pending_bookings > 0): ?>
+                                                            <span class="text-warning"><strong><?= $total_pending_bookings ?></strong> pending</span>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="property-features">
+                                                    <div class="property-feature">
+                                                        <i class="fas fa-bed"></i>
+                                                        <?= $property['bedrooms'] ?? 0 ?> beds
+                                                    </div>
+                                                    <div class="property-feature">
+                                                        <i class="fas fa-bath"></i>
+                                                        <?= $property['bathrooms'] ?? 0 ?> baths
+                                                    </div>
+                                                    <div class="property-feature">
+                                                        <i class="fas fa-ruler-combined"></i>
+                                                        <?= $property['area_sqft'] ? number_format($property['area_sqft']) : 'N/A' ?> sqft
+                                                    </div>
+                                                </div>
+                                                
+                                                <?php if ($property['average_rating']): ?>
+                                                    <div class="property-rating">
+                                                        <div class="stars">
+                                                            <?php
+                                                            $fullStars = floor($property['average_rating']);
+                                                            $halfStar = ceil($property['average_rating'] - $fullStars);
+                                                            $emptyStars = 5 - $fullStars - $halfStar;
+                                                            
+                                                            for ($i = 0; $i < $fullStars; $i++) {
+                                                                echo '<i class="fas fa-star"></i>';
+                                                            }
+                                                            if ($halfStar) {
+                                                                echo '<i class="fas fa-star-half-alt"></i>';
+                                                            }
+                                                            for ($i = 0; $i < $emptyStars; $i++) {
+                                                                echo '<i class="far fa-star"></i>';
+                                                            }
+                                                            ?>
+                                                        </div>
+                                                        <span class="rating-count">
+                                                            (<?= number_format($property['average_rating'], 1) ?>)
+                                                        </span>
+                                                    </div>
+                                                <?php endif; ?>
+                                                
+                                                <div class="property-actions">
+                                                    <a href="details.php?id=<?= $property['id'] ?>" class="btn btn-outline">
+                                                        <i class="far fa-eye"></i> View Details
+                                                    </a>
+                                                    <?php if ($total_available_spots > 0): ?>
+                                                        <!-- <a href="../bookings/new.php?property_id=<?= $property['id'] ?>" class="btn btn-primary">
+                                                            <i class="far fa-calendar-plus"></i> Book Now
+                                                        </a> -->
+                                                    <?php else: ?>
+                                                        <button class="btn btn-secondary" disabled>
+                                                            <i class="fas fa-times"></i> Fully Booked
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+
+            <div class="loading-spinner" id="loadingSpinner">
+                <div class="spinner"></div>
+                <p class="mt-2">Loading properties...</p>
+            </div>
+        </section>
+
+        <!-- Filter Sidebar (Now on the right) -->
         <aside class="filter-sidebar" id="filterSidebar">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h2 class="h5 mb-0">Filters</h2>
-                <button class="btn btn-sm btn-outline-primary" id="resetFilters">
+                <button class="btn-close mobile-only" id="closeFilterSidebar"></button>
+                <button class="btn btn-sm btn-outline-primary desktop-only" id="resetFilters">
                     <i class="fas fa-redo me-1"></i> Reset
                 </button>
             </div>
@@ -868,15 +1185,11 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div id="priceFilter" class="filter-content collapse show">
-                        <div class="range-slider">
-                            <input type="range" class="form-range" min="0" max="10000" step="50" 
-                                   id="priceRange" value="<?= $filters['max_price'] ?>">
-                        </div>
                         <div class="price-inputs">
                             <div class="form-group">
                                 <label for="minPrice" class="form-label">Min</label>
                                 <input type="number" class="form-control" id="minPrice" 
-                                       name="min_price" value="<?= $filters['min_price'] ?>" min="1500">
+                                       name="min_price" value="<?= $filters['min_price'] ?>" min="0">
                             </div>
                             <div class="form-group">
                                 <label for="maxPrice" class="form-label">Max</label>
@@ -942,7 +1255,7 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                     </div>
                 </div>
 
-                <!-- Gender
+                <!-- Gender Filter -->
                 <div class="filter-section">
                     <div class="filter-title" data-bs-toggle="collapse" data-bs-target="#genderFilter">
                         <span>Gender Preference</span>
@@ -950,22 +1263,22 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                     </div>
                     <div id="genderFilter" class="filter-content collapse show">
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="gender" id="genderAny" value="" 
-                                <?= empty($filters['gender']) ? 'checked' : '' ?>>
-                            <label class="form-check-label" for="genderAny">Any</label>
+                            <input class="form-check-input" type="radio" name="gender" 
+                                   id="gender-any" value="" <?= empty($filters['gender']) ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="gender-any">Any Gender</label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="gender" id="genderMale" value="male" 
-                                <?= $filters['gender'] === 'male' ? 'checked' : '' ?>>
-                            <label class="form-check-label" for="genderMale">Male Only</label>
+                            <input class="form-check-input" type="radio" name="gender" 
+                                   id="gender-male" value="male" <?= $filters['gender'] === 'male' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="gender-male">Male Only</label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="gender" id="genderFemale" value="female" 
-                                <?= $filters['gender'] === 'female' ? 'checked' : '' ?>>
-                            <label class="form-check-label" for="genderFemale">Female Only</label>
+                            <input class="form-check-input" type="radio" name="gender" 
+                                   id="gender-female" value="female" <?= $filters['gender'] === 'female' ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="gender-female">Female Only</label>
                         </div>
                     </div>
-                </div> -->
+                </div>
 
                 <!-- Amenities -->
                 <div class="filter-section">
@@ -988,23 +1301,6 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                     </div>
                 </div>
 
-                <!-- Levy Status Filter -->
-                <div class="filter-section">
-                    <div class="filter-title" data-bs-toggle="collapse" data-bs-target="#levyFilter">
-                        <span>Levy Status</span>
-                        <i class="fas fa-chevron-down"></i>
-                    </div>
-                    <div id="levyFilter" class="filter-content collapse show">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="levy_paid" 
-                                   id="levyPaid" checked disabled>
-                            <label class="form-check-label" for="levyPaid">
-                                <i class="fas fa-check-circle text-success me-1"></i> Levy Paid (Required)
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Hidden field to preserve sorting -->
                 <input type="hidden" name="sort" value="<?= $sort ?>">
 
@@ -1013,274 +1309,6 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
                 </button>
             </form>
         </aside>
-
-        <!-- Results Section -->
-        <section class="results-container">
-            <div class="welcome-banner">
-                <h2>Find Your Perfect Accommodation</h2>
-                <p>Search through our verified properties with guaranteed levy payment compliance for a safe and secure stay.</p>
-                <i class="fas fa-home banner-icon"></i>
-            </div>
-            
-            <div class="results-header">
-                <div class="results-count">
-                    <?= count($properties) ?> properties found
-                </div>
-                <div class="view-toggle">
-                    <button class="view-toggle-btn active" id="listViewBtn">
-                        <i class="fas fa-list"></i> List
-                    </button>
-                    <button class="view-toggle-btn" id="mapViewBtn">
-                        <i class="fas fa-map"></i> Map
-                    </button>
-                </div>
-            </div>
-
-            <!-- Map View (Hidden by default) -->
-            <div id="map-view"></div>
-
-            <!-- List View -->
-            <div id="list-view">
-                <?php if (empty($properties)): ?>
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i> No properties match your search criteria.
-                        Try adjusting your filters.
-                    </div>
-                <?php else: ?>
-                    <div class="property-grid">
-                        <?php foreach ($properties as $property): 
-                            // Get images for THIS property
-                            $image_query = "SELECT image_url FROM property_images WHERE property_id = ?";
-                            $image_stmt = $pdo->prepare($image_query);
-                            $image_stmt->execute([$property['id']]);
-                            $images = $image_stmt->fetchAll(PDO::FETCH_ASSOC);
-                            
-                            // Get room details with correct availability calculation
-                            $room_query = "SELECT pr.*, 
-                                           (SELECT COUNT(*) 
-                                            FROM bookings b 
-                                            WHERE b.room_id = pr.id 
-                                            AND b.status IN ('pending', 'confirmed', 'paid')
-                                           ) AS pending_bookings
-                                           FROM property_rooms pr 
-                                           WHERE pr.property_id = ? 
-                                           AND pr.levy_payment_status = 'approved'
-                                           AND pr.status = 'available'
-                                           ORDER BY pr.room_number ASC";
-                            $room_stmt = $pdo->prepare($room_query);
-                            $room_stmt->execute([$property['id']]);
-                            $rooms = $room_stmt->fetchAll();
-                            
-                            // Calculate total available spots
-                            $total_available_spots = 0;
-                            $total_bookings = 0;
-                            foreach ($rooms as $room) {
-                                $available_spots = $room['capacity'] - $room['current_occupancy'] - $room['pending_bookings'];
-                                $total_available_spots += max(0, $available_spots);
-                                $total_bookings += $room['pending_bookings'];
-                            }
-                        ?>
-                            <div class="property-card">
-                                <div class="property-image">
-                                    <div id="carousel-<?= $property['id'] ?>" class="carousel slide" data-bs-ride="carousel">
-                                        <div class="carousel-inner">
-                                            <?php if (!empty($images)): ?>
-                                                <?php foreach ($images as $index => $image): ?>
-                                                    <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>">
-                                                        <img src="../../uploads/<?= htmlspecialchars($image['image_url']) ?>" 
-                                                             class="d-block w-100" 
-                                                             alt="Property image">
-                                                    </div>
-                                                <?php endforeach; ?>
-                                            <?php else: ?>
-                                                <div class="carousel-item active">
-                                                    <img src="../../assets/images/default-property.jpg" 
-                                                         class="d-block w-100" 
-                                                         alt="Default property image">
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
-                                        <?php if (count($images) > 1): ?>
-                                            <button class="carousel-control-prev" type="button" 
-                                                    data-bs-target="#carousel-<?= $property['id'] ?>" 
-                                                    data-bs-slide="prev">
-                                                <span class="carousel-control-prev-icon"></span>
-                                            </button>
-                                            <button class="carousel-control-next" type="button" 
-                                                    data-bs-target="#carousel-<?= $property['id'] ?>" 
-                                                    data-bs-slide="next">
-                                                <span class="carousel-control-next-icon"></span>
-                                            </button>
-                                        <?php endif; ?>
-                                    </div>
-                                    <span class="property-badge">
-                                        <?= htmlspecialchars($property['status']) ?>
-                                    </span>
-                                    <span class="levy-badge" title="Levy payment approved">
-                                        <i class="fas fa-check-circle"></i> Levy Paid
-                                    </span>
-                                </div>
-                                <div class="property-content">
-                                    <div class="property-summary">
-                                        <div>
-                                            <h3 class="property-title">
-                                                <a href="details.php?id=<?= $property['id'] ?>" class="text-decoration-none">
-                                                    <?= htmlspecialchars($property['property_name']) ?>
-                                                </a>
-                                            </h3>
-                                            <div class="property-location">
-                                                <i class="fas fa-map-marker-alt"></i>
-                                                <?= htmlspecialchars($property['location']) ?>
-                                            </div>
-                                        </div>
-                                        <div class="property-status">
-                                            <?php if ($total_available_spots > 0): ?>
-                                                <span class="status-badge available-badge">Available</span>
-                                            <?php else: ?>
-                                                <span class="status-badge full-badge">Fully Booked</span>
-                                            <?php endif; ?>
-                                            <div class="property-price">
-                                                GHS <?= number_format($property['per_person_price'], 2) ?> 
-                                                <span>/year (per Tenant)</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="property-info">
-                                        <div class="d-flex align-items-center mb-2">
-                                            <span class="booking-count">
-                                                <i class="fas fa-bookmark"></i> <?= $total_bookings ?> bookings
-                                            </span>
-                                            <span class="available-count ms-3">
-                                                <i class="fas fa-user-friends"></i> <?= $total_available_spots ?> spots available
-                                            </span>
-                                        </div>
-                                        
-                                        <!-- Room Details Table -->
-                                        <div class="capacity-info">
-                                            <h5>Room Details</h5>
-                                            <table class="room-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Room</th>
-                                                        <th>Capacity</th>
-                                                        <th>Occupancy</th>
-                                                        <th>Gender</th>
-                                                        <th>Available</th>
-                                                        <th>Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($rooms as $room): 
-                                                        $available_spots = $room['capacity'] - $room['current_occupancy'] - $room['pending_bookings'];
-                                                        
-                                                        // Determine availability status
-                                                        if ($available_spots <= 0) {
-                                                            $availability_class = "full";
-                                                            $availability_text = "Fully Booked";
-                                                        } elseif ($available_spots <= 2) {
-                                                            $availability_class = "limited";
-                                                            $availability_text = "Limited";
-                                                        } else {
-                                                            $availability_class = "available";
-                                                            $availability_text = "Available";
-                                                        }
-                                                        
-                                                        // Gender badge
-                                                        $gender_class = ($room['gender'] == 'male') ? 'male-badge' : 'female-badge';
-                                                        $gender_icon = ($room['gender'] == 'male') ? 'mars' : 'venus';
-                                                    ?>
-                                                        <tr>
-                                                            <td><?= $room['room_number'] ?></td>
-                                                            <td><?= $room['capacity'] ?></td>
-                                                            <td><?= $room['current_occupancy'] ?> occupied</td>
-                                                            <td>
-                                                                <span class="gender-badge <?= $gender_class ?>">
-                                                                    <i class="fas fa-<?= $gender_icon ?>"></i> <?= ucfirst($room['gender']) ?>
-                                                                </span>
-                                                            </td>
-                                                            <td>
-                                                                <span class="availability-badge <?= $availability_class ?>">
-                                                                    <?= $available_spots > 0 ? $available_spots . ' spots' : 'Full' ?>
-                                                                </span>
-                                                            </td>
-                                                            <td>
-                                                                <?php if ($available_spots > 0): ?>
-                                                                    <a href="../bookings/create.php?property_id=<?= $property['id'] ?>&room_id=<?= $room['id'] ?>" 
-                                                                       class="btn btn-sm btn-primary">
-                                                                        <i class="fas fa-calendar-plus me-1"></i> Book
-                                                                    </a>
-                                                                <?php else: ?>
-                                                                    <span class="text-muted">Fully Booked</span>
-                                                                <?php endif; ?>
-                                                            </td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="property-features">
-                                        <div class="property-feature">
-                                            <i class="fas fa-bed"></i>
-                                            <?= $property['bedrooms'] ?? 0 ?> beds
-                                        </div>
-                                        <div class="property-feature">
-                                            <i class="fas fa-bath"></i>
-                                            <?= $property['bathrooms'] ?? 0 ?> baths
-                                        </div>
-                                        <div class="property-feature">
-                                            <i class="fas fa-ruler-combined"></i>
-                                            <?= $property['area_sqft'] ? number_format($property['area_sqft']) : 'N/A' ?> sqft
-                                        </div>
-                                    </div>
-                                    <?php if ($property['average_rating']): ?>
-                                        <div class="property-rating">
-                                            <div class="stars">
-                                                <?php
-                                                $fullStars = floor($property['average_rating']);
-                                                $halfStar = ceil($property['average_rating'] - $fullStars);
-                                                $emptyStars = 5 - $fullStars - $halfStar;
-                                                
-                                                for ($i = 0; $i < $fullStars; $i++) {
-                                                    echo '<i class="fas fa-star"></i>';
-                                                }
-                                                if ($halfStar) {
-                                                    echo '<i class="fas fa-star-half-alt"></i>';
-                                                }
-                                                for ($i = 0; $i < $emptyStars; $i++) {
-                                                    echo '<i class="far fa-star"></i>';
-                                                }
-                                                ?>
-                                            </div>
-                                            <span class="rating-count">
-                                                (<?= $property['average_rating'] ?>)
-                                            </span>
-                                        </div>
-                                    <?php endif; ?>
-                                    <div class="property-actions">
-                                        <a href="details.php?id=<?= $property['id'] ?>" class="btn btn-outline">
-                                            <i class="far fa-eye"></i> View Details
-                                        </a>
-                                        <?php if ($total_available_spots > 0): ?>
-                                            <a href="../bookings/create.php?property_id=<?= $property['id'] ?>" class="btn btn-primary">
-                                                <i class="far fa-calendar-plus"></i> Quick Book
-                                            </a>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
-
-            <div class="loading-spinner" id="loadingSpinner">
-                <div class="spinner"></div>
-                <p class="mt-2">Loading properties...</p>
-            </div>
-        </section>
     </main>
 
     <!-- Mobile Filter Button -->
@@ -1291,20 +1319,28 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
     <script>
-        // Initialize Bootstrap components
-        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        })
-        
-        const collapseElements = [].slice.call(document.querySelectorAll('.filter-content.collapse'))
-        collapseElements.forEach(function (collapseEl) {
-            new bootstrap.Collapse(collapseEl, { toggle: false })
-        })
-
-        // Toggle filter sidebar on mobile
+        // Enhanced mobile functionality
         document.getElementById('mobileFilterBtn').addEventListener('click', function() {
-            document.getElementById('filterSidebar').classList.toggle('active');
+            document.getElementById('filterSidebar').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        });
+
+        document.getElementById('closeFilterSidebar').addEventListener('click', function() {
+            document.getElementById('filterSidebar').classList.remove('active');
+            document.body.style.overflow = 'auto';
+        });
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(event) {
+            const sidebar = document.getElementById('filterSidebar');
+            const mobileBtn = document.getElementById('mobileFilterBtn');
+            if (window.innerWidth <= 992 && 
+                sidebar.classList.contains('active') && 
+                !sidebar.contains(event.target) && 
+                !mobileBtn.contains(event.target)) {
+                sidebar.classList.remove('active');
+                document.body.style.overflow = 'auto';
+            }
         });
 
         // Toggle between list and map view
@@ -1358,45 +1394,19 @@ $amenities = $pdo->query("SELECT DISTINCT feature_name FROM property_features")-
             }).addTo(map);
 
             // Add property markers
-            <?php foreach ($properties as $property): ?>
+            <?php foreach ($allProperties as $property): ?>
                 <?php if ($property['latitude'] && $property['longitude']): ?>
                     L.marker([<?= $property['latitude'] ?>, <?= $property['longitude'] ?>])
                         .addTo(map)
                         .bindPopup(`
                             <b><?= addslashes($property['property_name']) ?></b><br>
-                            GHS <?= number_format($property['per_person_price'], 2) ?>/year (per Tenant)<br>
+                            GHS <?= number_format($property['per_person_price'], 2) ?>/year<br>
                             <i class="fas fa-check-circle text-success"></i> Levy Paid<br>
                             <a href="details.php?id=<?= $property['id'] ?>" target="_blank">View Details</a>
                         `);
                 <?php endif; ?>
             <?php endforeach; ?>
         }
-
-        // Price range slider
-        const priceRange = document.getElementById('priceRange');
-        const minPriceInput = document.getElementById('minPrice');
-        const maxPriceInput = document.getElementById('maxPrice');
-
-        // Initialize slider value
-        priceRange.value = <?= $filters['max_price'] ?>;
-
-        priceRange.addEventListener('input', function() {
-            maxPriceInput.value = this.value;
-        });
-
-        minPriceInput.addEventListener('change', function() {
-            if (parseInt(this.value) > parseInt(maxPriceInput.value)) {
-                this.value = maxPriceInput.value;
-            }
-            priceRange.value = maxPriceInput.value;
-        });
-
-        maxPriceInput.addEventListener('change', function() {
-            if (parseInt(this.value) < parseInt(minPriceInput.value)) {
-                this.value = minPriceInput.value;
-            }
-            priceRange.value = this.value;
-        });
 
         // Filter form submission
         document.getElementById('searchFilters').addEventListener('submit', function(e) {

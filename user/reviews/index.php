@@ -84,17 +84,30 @@ if (isset($_GET['delete_id'])) {
     }
 }
 
-// Get properties for dropdown with details
+// Get properties that the student has booked (for review dropdown)
 $properties = [];
 try {
-    $stmt = $pdo->query("
-        SELECT p.id, p.property_name, p.location, p.bedrooms, p.bathrooms, p.price, 
-               GROUP_CONCAT(pi.image_url) AS images
+    $stmt = $pdo->prepare("
+        SELECT 
+            p.id, 
+            p.property_name, 
+            p.location, 
+            p.bedrooms, 
+            p.bathrooms, 
+            p.price, 
+            GROUP_CONCAT(pi.image_url) AS images,
+            MIN(b.id) as booking_id, 
+            MIN(b.status) as booking_status,
+            MAX(b.end_date) as latest_end_date
         FROM property p
+        INNER JOIN bookings b ON p.id = b.property_id
         LEFT JOIN property_images pi ON p.id = pi.property_id
-        WHERE p.status = 'available'
-        GROUP BY p.id
+        WHERE b.user_id = :user_id 
+          AND b.status IN ('confirmed', 'paid', 'cash_approved')
+        GROUP BY p.id, p.property_name, p.location, p.bedrooms, p.bathrooms, p.price
+        ORDER BY latest_end_date DESC
     ");
+    $stmt->execute([':user_id' => $student_id]);
     $properties = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // Decode images
@@ -102,7 +115,7 @@ try {
         $property['images'] = $property['images'] ? explode(',', $property['images']) : [];
     }
 } catch (PDOException $e) {
-    $_SESSION['error_message'] = "Error loading properties: " . $e->getMessage();
+    $_SESSION['error_message'] = "Error loading booked properties: " . $e->getMessage();
 }
 
 // Get user's reviews with property details

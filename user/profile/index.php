@@ -27,15 +27,15 @@ $error = '';
 
 // Update profile
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
-    $full_name = $_POST['full_name'];
+    // $full_name = $_POST['full_name'];
     $phone = $_POST['phone'];
     $location = $_POST['location'];
-    $gender = $_POST['gender'];
+    // $gender = $_POST['gender'];
     $payment_method = $_POST['payment_method']; // New payment method field
     
     try {
-        $stmt = $pdo->prepare("UPDATE users SET username = ?, phone_number = ?, location = ?, sex = ?, payment_method = ? WHERE id = ?");
-        $stmt->execute([$full_name, $phone, $location, $gender, $payment_method, $student_id]);
+        $stmt = $pdo->prepare("UPDATE users SET phone_number = ?, location = ?, payment_method = ? WHERE id = ?");
+        $stmt->execute([ $phone, $location, $payment_method, $student_id]);
         
         // Refresh student data
         $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
@@ -975,7 +975,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
                 <div class="profile-tabs">
                     <button class="profile-tab active" data-tab="profile">Profile</button>
                     <button class="profile-tab" data-tab="settings">Settings</button>
-                    <button class="profile-tab" data-tab="security">Security</button>
+                    <button class="profile-tab" data-tab="security">Password</button>
                 </div>
                 
                 <!-- Alerts -->
@@ -1025,10 +1025,6 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
                                         <span class="info-value"><?= htmlspecialchars($student['username']) ?></span>
                                     </div>
                                     <div class="info-item">
-                                        <span class="info-label">Student ID:</span>
-                                        <span class="info-value"><?= $student['student_id'] ? htmlspecialchars($student['user_id']) : 'Not set' ?></span>
-                                    </div>
-                                    <div class="info-item">
                                         <span class="info-label">Gender:</span>
                                         <span class="info-value"><?= ucfirst($student['sex']) ?></span>
                                     </div>
@@ -1064,7 +1060,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
                                 <div class="form-col">
                                     <div class="form-group">
                                         <label class="form-label">Full Name</label>
-                                        <input type="text" name="full_name" class="form-control" value="<?= htmlspecialchars($student['username']) ?>" required>
+                                        <input type="text" name="full_name" class="form-control" value="<?= htmlspecialchars($student['username']) ?>" disabled>
                                     </div>
                                 </div>
                                 <div class="form-col">
@@ -1082,7 +1078,7 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
                             
                             <div class="form-group">
                                 <label class="form-label">Gender</label>
-                                <select name="gender" class="form-control" required>
+                                <select name="gender" class="form-control" disabled>
                                     <option value="male" <?= $student['sex'] === 'male' ? 'selected' : '' ?>>Male</option>
                                     <option value="female" <?= $student['sex'] === 'female' ? 'selected' : '' ?>>Female</option>
                                     <option value="other" <?= $student['sex'] === 'other' ? 'selected' : '' ?>>Other</option>
@@ -1139,30 +1135,6 @@ $profile_pic_path = getProfilePicturePath($_SESSION['profile_picture'] ?? '');
             </div>
         </main>
     </div>
-
-    <!-- Mobile Navigation -->
-    <nav class="mobile-nav">
-        <ul>
-            <li>
-                <a href="view.php" class="active">
-                    <i class="fas fa-user"></i>
-                    <span>Profile</span>
-                </a>
-            </li>
-            <li>
-                <a href="edit.php">
-                    <i class="fas fa-edit"></i>
-                    <span>Edit</span>
-                </a>
-            </li>
-            <li>
-                <a href="settings.php">
-                    <i class="fas fa-cog"></i>
-                    <span>Settings</span>
-                </a>
-            </li>
-        </ul>
-    </nav>
 
     <!-- Avatar Cropping Modal -->
     <div class="cropper-modal" id="cropperModal">

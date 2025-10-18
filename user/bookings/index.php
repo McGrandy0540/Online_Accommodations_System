@@ -3,6 +3,7 @@
 session_start();
 
 require_once __DIR__. '../../../config/database.php';
+require_once 'booking_functions.php'; // Include the booking functions
 
 // Redirect to login if not authenticated
 if (!isset($_SESSION['user_id'])) {
@@ -36,46 +37,72 @@ $available_rooms = [];
 $error = '';
 $success = '';
 
-// Handle booking cancellation
+// Handle booking cancellation - CORRECTED VERSION
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_booking'])) {
     $booking_id = (int)$_POST['booking_id'];
     
     try {
         $pdo->beginTransaction();
         
-        // Get booking details
-        $stmt = $pdo->prepare("SELECT * FROM bookings WHERE id = ? AND user_id = ?");
+        // Get booking details with room information
+        $stmt = $pdo->prepare("
+            SELECT b.*, pr.id as room_id, pr.current_occupancy, pr.capacity, pr.available_spots
+            FROM bookings b 
+            LEFT JOIN property_rooms pr ON b.room_id = pr.id 
+            WHERE b.id = ? AND b.user_id = ?
+        ");
         $stmt->execute([$booking_id, $student_id]);
         $booking = $stmt->fetch();
         
-        if ($booking) {
-            // Update booking status
+        if ($booking && $booking['room_id']) {
+            // Update booking status to cancelled
             $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled', cancelled_at = NOW() WHERE id = ?");
             $stmt->execute([$booking_id]);
             
-            // Update room availability
-            if ($booking['room_id']) {
+            // Get current room state
+            $stmt = $pdo->prepare("SELECT current_occupancy, available_spots, capacity FROM property_rooms WHERE id = ?");
+            $stmt->execute([$booking['room_id']]);
+            $current_room = $stmt->fetch();
+            
+            if ($current_room) {
+                // Calculate new values based on booking status
+                if (in_array($booking['status'], ['confirmed', 'paid', 'cash_approved'])) {
+                    // For confirmed bookings: reduce occupancy AND increase available spots
+                    $new_occupancy = max(0, $current_room['current_occupancy'] - 1);
+                    $new_available_spots = min($current_room['capacity'], $current_room['available_spots'] + 1);
+                } else {
+                    // For pending bookings: only increase available spots (occupancy was never increased)
+                    $new_occupancy = $current_room['current_occupancy'];
+                    $new_available_spots = min($current_room['capacity'], $current_room['available_spots'] + 1);
+                }
+                
+                // Update room with proper status calculation
                 $stmt = $pdo->prepare("
                     UPDATE property_rooms 
-                    SET available_spots = available_spots + 1 
+                    SET current_occupancy = ?,
+                        available_spots = ?,
+                        status = CASE 
+                            WHEN ? < ? THEN 'available'
+                            ELSE 'occupied'
+                        END
                     WHERE id = ?
                 ");
-                $stmt->execute([$booking['room_id']]);
-                
-                // Update room status if needed
-                $stmt = $pdo->prepare("
-                    UPDATE property_rooms
-                    SET status = CASE 
-                        WHEN available_spots > 0 THEN 'available'
-                        ELSE 'occupied'
-                    END
-                    WHERE id = ?
-                ");
-                $stmt->execute([$booking['room_id']]);
+                $stmt->execute([
+                    $new_occupancy, 
+                    $new_available_spots, 
+                    $new_occupancy, 
+                    $current_room['capacity'],
+                    $booking['room_id']
+                ]);
             }
             
             $pdo->commit();
-            $success = "Booking #$booking_id has been cancelled successfully!";
+            $success = "Booking #$booking_id has been cancelled successfully! Room occupancy updated.";
+            
+            // Refresh the page to show updated data
+            header("Location: " . $_SERVER['PHP_SELF'] . "?property_id=$property_id" . ($room_id ? "&room_id=$room_id" : ""));
+            exit();
+            
         } else {
             $error = "Booking not found or you don't have permission to cancel it.";
         }
@@ -85,13 +112,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_booking'])) {
     }
 }
 
-// Get current bookings for this student
+// Get current bookings for this student - CORRECTED QUERY
 $bookings_stmt = $pdo->prepare("
-    SELECT b.*, p.property_name, pr.room_number, p.location
+    SELECT b.*, p.property_name, pr.room_number, p.location, pr.current_occupancy, pr.capacity,
+           TIMESTAMPDIFF(SECOND, NOW(), b.payment_deadline) as seconds_remaining
     FROM bookings b
     JOIN property p ON b.property_id = p.id
     LEFT JOIN property_rooms pr ON b.room_id = pr.id
-    WHERE b.user_id = ? AND b.status IN ('pending', 'confirmed', 'paid')
+    WHERE b.user_id = ? AND b.status IN ('pending', 'confirmed', 'paid', 'cash_approved')
+    AND b.cancelled_at IS NULL
+    ORDER BY b.created_at DESC
 ");
 $bookings_stmt->execute([$student_id]);
 $current_bookings = $bookings_stmt->fetchAll();
@@ -105,18 +135,23 @@ if ($property_id) {
     if (!$property) {
         $error = "Property not found or not available.";
     } else {
-        // Get available rooms for this property with levy verification
+        // CORRECTED: Get available rooms with proper availability calculation
         $stmt = $pdo->prepare("
             SELECT pr.*, 
-                   (pr.capacity - (SELECT COUNT(b.id) FROM bookings b 
-                                   WHERE b.room_id = pr.id 
-                                   AND b.status IN ('confirmed', 'paid'))) as available_spots
+                   (pr.capacity - pr.current_occupancy - 
+                    (SELECT COUNT(*) FROM bookings b 
+                     WHERE b.room_id = pr.id 
+                     AND b.status IN ('pending', 'pending_payment', 'confirmed', 'paid', 'cash_approved')
+                     AND b.cancelled_at IS NULL)) as calculated_available_spots
             FROM property_rooms pr
             WHERE pr.property_id = ? 
             AND pr.levy_payment_status = 'approved' 
             AND (pr.levy_expiry_date IS NULL OR pr.levy_expiry_date >= CURDATE())
-            AND pr.status = 'available'
-            HAVING available_spots > 0
+            AND (pr.capacity - pr.current_occupancy - 
+                 (SELECT COUNT(*) FROM bookings b 
+                  WHERE b.room_id = pr.id 
+                  AND b.status IN ('pending', 'pending_payment', 'confirmed', 'paid', 'cash_approved')
+                  AND b.cancelled_at IS NULL)) > 0
         ");
         $stmt->execute([$property_id]);
         $available_rooms = $stmt->fetchAll();
@@ -125,21 +160,27 @@ if ($property_id) {
         if ($room_id) {
             $stmt = $pdo->prepare("
                 SELECT pr.*, 
-                       (pr.capacity - (SELECT COUNT(b.id) FROM bookings b 
-                                       WHERE b.room_id = pr.id 
-                                       AND b.status IN ('confirmed', 'paid'))) as available_spots
+                       (pr.capacity - pr.current_occupancy - 
+                        (SELECT COUNT(*) FROM bookings b 
+                         WHERE b.room_id = pr.id 
+                         AND b.status IN ('pending', 'pending_payment', 'confirmed', 'paid', 'cash_approved')
+                         AND b.cancelled_at IS NULL)) as calculated_available_spots
                 FROM property_rooms pr
                 WHERE pr.id = ? 
                 AND pr.property_id = ?
                 AND pr.levy_payment_status = 'approved' 
                 AND (pr.levy_expiry_date IS NULL OR pr.levy_expiry_date >= CURDATE())
-                AND pr.status = 'available'
                 AND (pr.gender = ? OR pr.gender IS NULL)
+                AND (pr.capacity - pr.current_occupancy - 
+                     (SELECT COUNT(*) FROM bookings b 
+                      WHERE b.room_id = pr.id 
+                      AND b.status IN ('pending', 'pending_payment', 'confirmed', 'paid', 'cash_approved')
+                      AND b.cancelled_at IS NULL)) > 0
             ");
             $stmt->execute([$room_id, $property_id, $student['sex']]);
             $room = $stmt->fetch();
             
-            if (!$room || $room['available_spots'] <= 0) {
+            if (!$room || $room['calculated_available_spots'] <= 0) {
                 $error = "Selected room is not available or doesn't match your gender.";
                 $room = null;
             }
@@ -149,7 +190,7 @@ if ($property_id) {
     $error = "No property selected.";
 }
 
-// Handle form submission
+// Handle form submission for new booking - CORRECTED VERSION
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_booking'])) {
     $start_date = $_POST['start_date'];
     $duration = (int)$_POST['duration'];
@@ -167,12 +208,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_booking'])) {
         // Calculate end date
         $end_date = date('Y-m-d', strtotime($start_date . " +$duration months"));
         
-        // Check room availability again with gender matching
+        // CORRECTED: Check room availability with proper occupancy calculation
         $stmt = $pdo->prepare("
-            SELECT pr.capacity, pr.gender, 
-                   (SELECT COUNT(b.id) FROM bookings b 
+            SELECT pr.capacity, pr.gender, pr.current_occupancy, pr.available_spots,
+                   (SELECT COUNT(*) FROM bookings b 
                     WHERE b.room_id = pr.id 
-                    AND b.status IN ('confirmed', 'paid')) as current_occupants
+                    AND b.status IN ('pending', 'pending_payment', 'confirmed', 'paid', 'cash_approved')
+                    AND b.cancelled_at IS NULL) as active_bookings
             FROM property_rooms pr
             WHERE pr.id = ?
             AND (pr.gender = ? OR pr.gender IS NULL)
@@ -180,64 +222,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_booking'])) {
         $stmt->execute([$selected_room_id, $student['sex']]);
         $room_check = $stmt->fetch();
         
-        if ($room_check && ($room_check['current_occupants'] < $room_check['capacity'])) {
-            // Calculate total price
-            $total_price = $property['price'] * $duration;
+        if ($room_check) {
+            $total_occupied = $room_check['current_occupancy'] + $room_check['active_bookings'];
+            $available_spots = $room_check['capacity'] - $total_occupied;
             
-            // Create booking
-            try {
-                $pdo->beginTransaction();
+            if ($available_spots > 0) {
+                // Calculate total price
+                $total_price = $property['price'] * $duration;
                 
-                // Insert booking
-                $stmt = $pdo->prepare("
-                    INSERT INTO bookings 
-                    (user_id, property_id, room_id, start_date, end_date, duration_months, special_requests, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
-                ");
-                $stmt->execute([
-                    $student_id,
-                    $property_id,
-                    $selected_room_id,
-                    $start_date,
-                    $end_date,
-                    $duration,
-                    $special_requests
-                ]);
-                
-                $booking_id = $pdo->lastInsertId();
-                
-                // Update room status and available spots
-                $stmt = $pdo->prepare("
-                    UPDATE property_rooms 
-                    SET available_spots = available_spots - 1 
-                    WHERE id = ?
-                ");
-                $stmt->execute([$selected_room_id]);
-                
-                // Update room status if it becomes fully occupied
-                $stmt = $pdo->prepare("
-                    UPDATE property_rooms
-                    SET status = CASE 
-                        WHEN available_spots <= 1 THEN 'occupied'
-                        ELSE 'available'
-                    END
-                    WHERE id = ?
-                ");
-                $stmt->execute([$selected_room_id]);
-                
-                $pdo->commit();
-                
-                $success = "Booking created successfully!";
-                // Redirect to booking details or payment page
-                header("Location: receipt.php?id=$booking_id");
-                exit();
-                
-            } catch (PDOException $e) {
-                $pdo->rollBack();
-                $error = "Error creating booking: " . $e->getMessage();
+                // Create booking
+                try {
+                    $pdo->beginTransaction();
+                    
+                    // Insert booking with 24-hour payment deadline
+                    $stmt = $pdo->prepare("
+                        INSERT INTO bookings 
+                        (user_id, property_id, room_id, start_date, end_date, duration_months, special_requests, status, created_at, payment_deadline)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR))
+                    ");
+                    $stmt->execute([
+                        $student_id,
+                        $property_id,
+                        $selected_room_id,
+                        $start_date,
+                        $end_date,
+                        $duration,
+                        $special_requests
+                    ]);
+                    
+                    $booking_id = $pdo->lastInsertId();
+                    
+                    // CORRECTED: Update room available spots and status
+                    $new_available_spots = max(0, $room_check['available_spots'] - 1);
+                    
+                    $stmt = $pdo->prepare("
+                        UPDATE property_rooms 
+                        SET available_spots = ?,
+                            status = CASE 
+                                WHEN ? > 0 AND current_occupancy < capacity THEN 'available'
+                                ELSE 'occupied'
+                            END
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$new_available_spots, $new_available_spots, $selected_room_id]);
+                    
+                    $pdo->commit();
+                    
+                    $success = "Booking created successfully!";
+                    // Redirect to booking details or payment page
+                    header("Location: receipt.php?id=$booking_id");
+                    exit();
+                    
+                } catch (PDOException $e) {
+                    $pdo->rollBack();
+                    $error = "Error creating booking: " . $e->getMessage();
+                }
+            } else {
+                $error = "Selected room is no longer available.";
             }
         } else {
-            $error = "Selected room is no longer available or doesn't match your gender.";
+            $error = "Selected room is not available or doesn't match your gender.";
         }
     }
 }
@@ -265,7 +309,7 @@ function getProfilePicturePath($path) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-         :root {
+        :root {
             --primary-color: #3498db;
             --primary-hover: #2980b9;
             --secondary-color: #2c3e50;
@@ -500,6 +544,59 @@ function getProfilePicturePath($path) {
             font-size: 0.85rem;
             margin-top: 5px;
         }
+        
+        .cancellation-note {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .occupancy-info {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .payment-timer {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        
+        .payment-timer.warning {
+            color: var(--warning-color);
+        }
+        
+        .payment-timer.danger {
+            color: var(--accent-color);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.6;
+            }
+        }
+        
+        .timer-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-left: 5px;
+        }
+        
+        .timer-badge.warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .timer-badge.danger {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
@@ -529,6 +626,7 @@ function getProfilePicturePath($path) {
             <div class="card mb-4">
                 <div class="card-header">
                     <h2 class="h4 mb-0">My Current Bookings</h2>
+                    <p class="mb-0 text-muted">Cancelling a booking will free up the room spot for other students</p>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -541,6 +639,8 @@ function getProfilePicturePath($path) {
                                     <th>Start Date</th>
                                     <th>End Date</th>
                                     <th>Status</th>
+                                    <th>Payment Deadline</th>
+                                    <th>Room Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -557,18 +657,45 @@ function getProfilePicturePath($path) {
                                         <td>
                                             <span class="status-badge bg-<?= 
                                                 $booking['status'] === 'confirmed' ? 'success' : 
-                                                ($booking['status'] === 'paid' ? 'primary' : 'warning')
+                                                ($booking['status'] === 'paid' ? 'primary' : 
+                                                ($booking['status'] === 'cash_approved' ? 'info' : 'warning'))
                                             ?>">
                                                 <?= ucfirst($booking['status']) ?>
                                             </span>
                                         </td>
                                         <td>
-                                            <form method="POST" onsubmit="return confirm('Are you sure you want to cancel this booking?');">
+                                            <?php if ($booking['status'] === 'pending' && $booking['seconds_remaining'] !== null): ?>
+                                                <?php if ($booking['seconds_remaining'] > 0): ?>
+                                                    <div class="payment-timer" data-seconds="<?= $booking['seconds_remaining'] ?>">
+                                                        <i class="fas fa-clock text-warning"></i>
+                                                        <span class="timer-text">Calculating...</span>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <span class="text-danger"><i class="fas fa-exclamation-circle"></i> Expired</span>
+                                                <?php endif; ?>
+                                            <?php else: ?>
+                                                <span class="text-muted">N/A</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <span class="occupancy-info">
+                                                <?= $booking['current_occupancy'] ?>/<?= $booking['capacity'] ?> occupied
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <form method="POST" onsubmit="return confirm('Are you sure you want to cancel booking #<?= $booking['id'] ?>? This action cannot be undone.');">
                                                 <input type="hidden" name="booking_id" value="<?= $booking['id'] ?>">
                                                 <button type="submit" name="cancel_booking" class="btn btn-sm btn-danger">
                                                     <i class="fas fa-times me-1"></i> Cancel
                                                 </button>
                                             </form>
+                                            <div class="cancellation-note">
+                                                <?php if (in_array($booking['status'], ['confirmed', 'paid', 'cash_approved'])): ?>
+                                                    Will free up 1 occupancy spot
+                                                <?php else: ?>
+                                                    Will free up 1 available spot
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -637,9 +764,10 @@ function getProfilePicturePath($path) {
                             <?php if (count($available_rooms) > 0): ?>
                                 <div class="room-grid">
                                     <?php foreach ($available_rooms as $room_item): 
-                                        $is_selected = ($room && $room['id'] == $room_item['id']) || (!$room && $room_item['available_spots'] > 0);
-                                        $capacity_percent = ($room_item['capacity'] - $room_item['available_spots']) / $room_item['capacity'] * 100;
+                                        $is_selected = ($room && $room['id'] == $room_item['id']) || (!$room && $room_item['calculated_available_spots'] > 0);
+                                        $capacity_percent = ($room_item['capacity'] - $room_item['calculated_available_spots']) / $room_item['capacity'] * 100;
                                         $gender_match = (!$room_item['gender'] || $room_item['gender'] === $student['sex']);
+                                        $available_spots = $room_item['calculated_available_spots'];
                                     ?>
                                         <div class="card room-card <?= $is_selected ? 'selected' : '' ?>" 
                                              data-room-id="<?= $room_item['id'] ?>"
@@ -648,12 +776,12 @@ function getProfilePicturePath($path) {
                                                 <h5 class="card-title">Room <?= htmlspecialchars($room_item['room_number']) ?></h5>
                                                 <div class="mb-2">
                                                     <span class="badge bg-<?= 
-                                                        $room_item['available_spots'] == $room_item['capacity'] ? 'success' : 
-                                                        ($room_item['available_spots'] > 0 ? 'warning' : 'danger')
+                                                        $available_spots == $room_item['capacity'] ? 'success' : 
+                                                        ($available_spots > 0 ? 'warning' : 'danger')
                                                     ?>">
                                                         <?= 
-                                                            $room_item['available_spots'] == $room_item['capacity'] ? 'Available' : 
-                                                            ($room_item['available_spots'] > 0 ? 'Partially Booked' : 'Fully Booked')
+                                                            $available_spots == $room_item['capacity'] ? 'Available' : 
+                                                            ($available_spots > 0 ? 'Partially Booked' : 'Fully Booked')
                                                         ?>
                                                     </span>
                                                     <?php if ($gender_match): ?>
@@ -665,7 +793,7 @@ function getProfilePicturePath($path) {
                                                 <div class="room-capacity">
                                                     <?php for ($i = 0; $i < $room_item['capacity']; $i++): ?>
                                                         <div class="capacity-dot <?= 
-                                                            $i < ($room_item['capacity'] - $room_item['available_spots']) ? 'occupied' : 'available'
+                                                            $i < ($room_item['capacity'] - $available_spots) ? 'occupied' : 'available'
                                                         ?>"></div>
                                                     <?php endfor; ?>
                                                 </div>
@@ -675,7 +803,11 @@ function getProfilePicturePath($path) {
                                                 </p>
                                                 <p class="mb-1">
                                                     <i class="fas fa-user-check me-2"></i>
-                                                    Available spots: <?= $room_item['available_spots'] ?>
+                                                    Available spots: <?= $available_spots ?>
+                                                </p>
+                                                <p class="mb-1">
+                                                    <i class="fas fa-users me-2"></i>
+                                                    Current occupancy: <?= $room_item['current_occupancy'] ?>
                                                 </p>
                                                 <p class="mb-0">
                                                     <i class="fas fa-venus-mars me-2"></i>
@@ -733,6 +865,9 @@ function getProfilePicturePath($path) {
                                             <p class="mb-0" id="selectedRoomGender">
                                                 <?= $room ? 'Gender: '.ucfirst($room['gender']) : '' ?>
                                             </p>
+                                            <p class="mb-0" id="selectedRoomAvailability">
+                                                <?= $room ? 'Available spots: '.$room['calculated_available_spots'] : '' ?>
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -783,10 +918,9 @@ function getProfilePicturePath($path) {
                     <div class="text-center mt-4">
                         <a href="../search/" class="btn btn-primary">
                             <i class="fas fa-search me-2"></i> Find Accommodation
-                            
                         </a>
                         <a href="../dashboard.php" class="btn btn-primary">
-                            <i class ="fas fa-arrow-left me-2"></i>Back to Dashboard
+                            <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
                         </a>
                     </div>
                 <?php endif; ?>
@@ -843,6 +977,10 @@ function getProfilePicturePath($path) {
                             <i class="fas fa-exclamation-triangle me-2"></i>
                             Rooms with gender mismatch cannot be booked.
                         </div>
+                        <div class="alert alert-success">
+                            <i class="fas fa-sync-alt me-2"></i>
+                            Room occupancy is automatically updated when bookings are cancelled.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -857,6 +995,7 @@ function getProfilePicturePath($path) {
             const selectedRoomInput = document.getElementById('selectedRoomId');
             const selectedRoomText = document.getElementById('selectedRoomText');
             const selectedRoomGender = document.getElementById('selectedRoomGender');
+            const selectedRoomAvailability = document.getElementById('selectedRoomAvailability');
             const summaryRoom = document.getElementById('summaryRoom');
             const submitBtn = document.getElementById('submitBooking');
             
@@ -879,14 +1018,14 @@ function getProfilePicturePath($path) {
                     // Get room ID
                     const roomId = this.getAttribute('data-room-id');
                     const roomNumber = this.querySelector('.card-title').textContent;
-                    const roomGender = this.querySelector('.gender-match') ? 
-                        this.querySelector('.gender-match').textContent : 
-                        this.querySelector('.gender-mismatch').textContent;
+                    const roomGender = this.querySelector('.fa-venus-mars').nextSibling.textContent.trim();
+                    const roomAvailability = this.querySelector('.fa-user-check').nextSibling.textContent.trim();
                     
                     // Update form and summary
                     selectedRoomInput.value = roomId;
                     selectedRoomText.textContent = roomNumber;
-                    selectedRoomGender.textContent = roomGender;
+                    selectedRoomGender.textContent = 'Gender: ' + roomGender;
+                    selectedRoomAvailability.textContent = roomAvailability;
                     summaryRoom.textContent = roomNumber;
                     
                     // Recalculate total price
@@ -972,8 +1111,65 @@ function getProfilePicturePath($path) {
                         e.preventDefault();
                         alert('You cannot book a room with gender requirements that don\'t match your profile.');
                     }
+                } else {
+                    e.preventDefault();
+                    alert('Please select a room before completing your booking.');
                 }
             });
+            
+            // Payment deadline countdown timers
+            function updateCountdownTimers() {
+                const timers = document.querySelectorAll('.payment-timer');
+                
+                timers.forEach(timer => {
+                    let secondsRemaining = parseInt(timer.getAttribute('data-seconds'));
+                    
+                    if (secondsRemaining <= 0) {
+                        timer.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle"></i> Expired</span>';
+                        return;
+                    }
+                    
+                    // Update the timer
+                    const timerText = timer.querySelector('.timer-text');
+                    const hours = Math.floor(secondsRemaining / 3600);
+                    const minutes = Math.floor((secondsRemaining % 3600) / 60);
+                    const seconds = secondsRemaining % 60;
+                    
+                    let timeString = '';
+                    let badgeClass = '';
+                    
+                    if (hours > 0) {
+                        timeString = `${hours}h ${minutes}m`;
+                        badgeClass = hours < 2 ? 'warning' : '';
+                    } else if (minutes > 0) {
+                        timeString = `${minutes}m ${seconds}s`;
+                        badgeClass = minutes < 30 ? 'danger' : 'warning';
+                    } else {
+                        timeString = `${seconds}s`;
+                        badgeClass = 'danger';
+                    }
+                    
+                    // Apply classes
+                    timer.className = 'payment-timer ' + badgeClass;
+                    timerText.innerHTML = `<span class="timer-badge ${badgeClass}">${timeString} left</span>`;
+                    
+                    // Decrement for next iteration
+                    timer.setAttribute('data-seconds', secondsRemaining - 1);
+                    
+                    // Warn user when time is running out
+                    if (secondsRemaining === 3600) { // 1 hour left
+                        alert('Warning: Your booking payment deadline is in 1 hour! Please complete payment to secure your booking.');
+                    } else if (secondsRemaining === 600) { // 10 minutes left
+                        alert('Urgent: Only 10 minutes left to complete your booking payment!');
+                    }
+                });
+            }
+            
+            // Initialize and update timers
+            if (document.querySelectorAll('.payment-timer').length > 0) {
+                updateCountdownTimers(); // Initial update
+                setInterval(updateCountdownTimers, 1000); // Update every second
+            }
         });
     </script>
 </body>

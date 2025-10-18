@@ -935,9 +935,9 @@ $unread_notifications = $notifications_stmt->fetchAll();
                                         <?= ucfirst(str_replace('_', ' ', $student['payment_method'] ?? 'mobile_money')) ?>
                                     </p>
                                 </div>
-                                <a href="payment_methods.php" class="btn btn-outline-primary w-100">
+                                <!-- <a href="payment_methods.php" class="btn btn-outline-primary w-100">
                                     <i class="fas fa-plus me-1"></i> Add Payment Method
-                                </a>
+                                </a> -->
                             </div>
                         </div>
                     </div>

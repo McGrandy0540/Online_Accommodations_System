@@ -1,7 +1,6 @@
 <?php
 session_start();
 require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../../includes/SMSNotification.php';
 
 // Check if user is logged in and is a student
 if (!isset($_SESSION['user_id'])) {
@@ -33,40 +32,36 @@ function getProfilePicturePath($path) {
 // Database connection
 $pdo = Database::getInstance();
 
-// Add delivered column if not exists (one-time operation)
-try {
-    $pdo->exec("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS delivered TINYINT(1) DEFAULT 0");
-} catch (PDOException $e) {
-    error_log("Notification table update error: " . $e->getMessage());
-}
-
 // Initialize Notification Service
-require_once __DIR__ . '/../../includes/NotificationService.php';
+require_once __DIR__ . '../../../includes/NotificationService.php';
 $notificationService = new NotificationService();
 
-// Process undelivered notifications and send SMS when student views notifications
-// This is the new flow: SMS is sent when student accesses their notification portal
-$smsResults = $notificationService->processPendingSMSForUser($userId);
+// Process undelivered notifications (both SMS and Email)
+$notificationResults = $notificationService->processPendingNotificationsForUser($userId);
 
-// Log SMS processing results for debugging
-if ($smsResults['processed'] > 0) {
-    error_log("SMS Processing for User $userId: " . 
-              "Processed: {$smsResults['processed']}, " .
-              "Success: {$smsResults['success']}, " .
-              "Failed: {$smsResults['failed']}");
+// Log processing results for debugging
+if ($notificationResults['sms']['processed'] > 0 || $notificationResults['email']['processed'] > 0) {
+    error_log("Notification Processing for User $userId: " . 
+              "SMS - Processed: {$notificationResults['sms']['processed']}, " .
+              "Success: {$notificationResults['sms']['success']}, " .
+              "Failed: {$notificationResults['sms']['failed']}; " .
+              "Email - Processed: {$notificationResults['email']['processed']}, " .
+              "Queued: {$notificationResults['email']['queued']}, " .
+              "Failed: {$notificationResults['email']['failed']}");
 }
 
 // Mark all notifications as read when page loads
 $updateStmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ?");
 $updateStmt->execute([$userId]);
 
-// Fetch notifications
+// Fetch notifications for display
 $stmt = $pdo->prepare("
     SELECT n.*, p.property_name 
     FROM notifications n
     LEFT JOIN property p ON n.property_id = p.id
     WHERE n.user_id = ?
     ORDER BY n.created_at DESC
+    LIMIT 50
 ");
 $stmt->execute([$userId]);
 $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -91,11 +86,15 @@ function timeAgo($datetime) {
     }
 }
 
-// Fetch user's profile picture
-$profileStmt = $pdo->prepare("SELECT profile_picture FROM users WHERE id = ?");
+// Fetch user's profile picture and email
+$profileStmt = $pdo->prepare("SELECT profile_picture, email FROM users WHERE id = ?");
 $profileStmt->execute([$userId]);
 $profileData = $profileStmt->fetch(PDO::FETCH_ASSOC);
 $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '');
+$user_email = $profileData['email'] ?? '';
+
+// Get pending emails for JavaScript processing
+$pendingEmails = $notificationService->getPendingEmails($userId);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,6 +103,10 @@ $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '')
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Notifications - Landlords&Tenants</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Add jQuery (required for EmailJS) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- EmailJS SDK -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <style>
         :root {
             --primary-color: #3498db;
@@ -454,6 +457,27 @@ $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '')
             background: var(--primary-hover);
         }
 
+        /* Email Status Indicator */
+        .email-status {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: var(--border-radius);
+            text-align: center;
+            display: none;
+        }
+
+        .email-status.success {
+            background-color: rgba(40, 167, 69, 0.1);
+            color: var(--success-color);
+            border: 1px solid var(--success-color);
+        }
+
+        .email-status.error {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--accent-color);
+            border: 1px solid var(--accent-color);
+        }
+
         /* Responsive Design */
         @media (max-width: 992px) {
             .sidebar {
@@ -560,7 +584,7 @@ $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '')
                     <li><a href="../search/"><i class="fas fa-search"></i> <span class="menu-text">Find Accommodation</span></a></li>
                     <li><a href="../bookings/"><i class="fas fa-calendar-alt"></i> <span class="menu-text">My Bookings</span></a></li>
                     <li><a href="../payments/"><i class="fas fa-wallet"></i> <span class="menu-text">Payments</span></a></li>
-                    <li><a href="../messages/"><i class="fas fa-comments"></i> <span class="menu-text">Messages</span></a></li>
+                   
                     <li><a href="../reviews/"><i class="fas fa-star"></i> <span class="menu-text">Reviews</span></a></li>
                     <li><a href="../maintenance/"><i class="fas fa-tools"></i> <span class="menu-text">Maintenance</span></a></li>
                     <li><a href="../profile/"><i class="fas fa-cog"></i> <span class="menu-text">Settings</span></a></li>
@@ -578,7 +602,7 @@ $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '')
                         <i class="fas fa-bars"></i>
                     </button>
                     
-                    <a href="../dashbord.php" class="logo">
+                    <a href="../dashboard.php" class="logo">
                         <img src="../../assets/images/landlords-logo2.png" alt="Logo">
                         <span>Landlords&Tenant</span>
                     </a>
@@ -618,6 +642,9 @@ $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '')
                         <i class="fas fa-check-circle me-2"></i>Mark All as Read
                     </button>
                 </div>
+
+                <!-- Email Status Messages -->
+                <div id="emailStatus" class="email-status"></div>
                 
                 <div class="notification-list">
                     <?php if (count($notifications) > 0): ?>
@@ -682,6 +709,12 @@ $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '')
     </div>
 
     <script>
+        // Initialize EmailJS with your public key
+        (function() {
+            // Replace with your actual EmailJS public key
+            emailjs.init("S25gyWDEduPngszAk");
+        })();
+
         // Toggle sidebar
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('collapsed');
@@ -721,7 +754,92 @@ $profile_pic_path = getProfilePicturePath($profileData['profile_picture'] ?? '')
                 console.error('Error:', error);
             });
         });
-        
+
+        // Function to send email via EmailJS
+        function sendEmailNotification(emailData) {
+            const templateParams = {
+                to_email: emailData.to_email,
+                to_name: emailData.to_name,
+                subject: emailData.subject,
+                message: emailData.message,
+                notification_type: emailData.notification_type,
+                property_name: emailData.property_name,
+                timestamp: emailData.timestamp
+            };
+
+            // Replace with your actual EmailJS service ID and template ID
+            return emailjs.send('service_axayyvo', 'template_62mf29n', templateParams)
+                .then(function(response) {
+                    console.log('Email sent successfully!', response.status, response.text);
+                    showEmailStatus('Email notification sent successfully!', 'success');
+                    return { success: true, queueId: emailData.queue_id };
+                }, function(error) {
+                    console.error('Email failed to send:', error);
+                    showEmailStatus('Failed to send email notification. Please try again.', 'error');
+                    return { success: false, queueId: emailData.queue_id, error: error };
+                });
+        }
+
+        // Function to mark email as sent in database
+        function markEmailAsSent(queueId) {
+            return fetch('mark_email_sent.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ queue_id: queueId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Failed to mark email as sent');
+                return false;
+                }
+                return true;
+            })
+            .catch(error => {
+                console.error('Error marking email as sent:', error);
+                return false;
+            });
+        }
+
+        // Function to show email status messages
+        function showEmailStatus(message, type) {
+            const statusDiv = document.getElementById('emailStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `email-status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            // Auto-hide success messages after 5 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Process pending emails when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            const pendingEmails = <?= json_encode($pendingEmails) ?>;
+            
+            if (pendingEmails.length > 0) {
+                console.log(`Processing ${pendingEmails.length} pending emails`);
+                
+                // Send emails one by one with a delay to avoid rate limiting
+                pendingEmails.forEach((email, index) => {
+                    setTimeout(() => {
+                        sendEmailNotification(email)
+                            .then(result => {
+                                if (result.success) {
+                                    // Mark email as sent in database
+                                    markEmailAsSent(result.queueId);
+                                }
+                            });
+                    }, index * 1000); // 1 second delay between emails
+                });
+            }
+        });
+
         // Close dropdown when clicking outside
         document.addEventListener('click', function(event) {
             const dropdowns = document.querySelectorAll('.dropdown');

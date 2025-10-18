@@ -7,8 +7,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['status'] !== 'admin') {
     exit();
 }
 
-
-
 // Database connection
 require_once(__DIR__ . '../../../config/database.php');
 $db = Database::getInstance();
@@ -39,8 +37,6 @@ try {
         header("Location: index.php");
         exit();
     }
-
-
     
     // Get room details
     $roomStmt = $db->prepare("SELECT * FROM property_rooms WHERE property_id = ?");
@@ -61,24 +57,24 @@ try {
     $occupancyStmt->execute([$propertyId]);
     $occupancy = $occupancyStmt->fetch(PDO::FETCH_ASSOC);
 
-$stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
-$stmt->execute([$property['owner_id']]);
-$owner = $stmt->fetch();
+    $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$property['owner_id']]);
+    $owner = $stmt->fetch();
 
     // Get profile picture path
-function getProfilePicturePath($path) {
-    if (empty($path)) {
-        return null;
+    function getProfilePicturePath($path) {
+        if (empty($path)) {
+            return null;
+        }
+        
+        if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
+            return $path;
+        }
+        
+        return '../../../' . ltrim($path, '/');
     }
-    
-    if (strpos($path, 'http') === 0 || strpos($path, '/') === 0) {
-        return $path;
-    }
-    
-    return '../../' . ltrim($path, '/');
-}
 
-$profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
+    $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
     
     // Get features
     $features = $db->prepare("SELECT feature_name FROM property_features WHERE property_id = ?");
@@ -99,7 +95,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Property | landlords&Tenant Admin</title>
+    <title>View Property | Landlords&Tenant Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -138,13 +134,13 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
         .main-content {
             flex: 1;
             padding: 20px;
-            padding-top: 70px;
+            padding-top: 90px;
         }
         
         .top-nav {
             position: fixed;
             top: 0;
-            left: 280px;
+            left: 0;
             right: 0;
             height: 70px;
             background: var(--white);
@@ -186,6 +182,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 20px;
+            margin-bottom: 20px;
         }
         
         .detail-card {
@@ -209,6 +206,12 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
         
         .detail-card p {
             font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+        
+        .text-muted {
+            color: var(--gray);
+            font-size: 0.9rem;
         }
         
         .features-list {
@@ -223,6 +226,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             padding: 5px 10px;
             border-radius: 20px;
             font-size: 0.9rem;
+            border: 1px solid var(--light-gray);
         }
         
         .virtual-tour-container {
@@ -231,7 +235,8 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
         }
         
         .virtual-tour-container iframe,
-        .virtual-tour-container img {
+        .virtual-tour-container img,
+        .virtual-tour-container video {
             width: 100%;
             max-width: 600px;
             height: 400px;
@@ -293,6 +298,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             display: flex;
             gap: 10px;
             margin-top: 20px;
+            flex-wrap: wrap;
         }
         
         .btn {
@@ -304,6 +310,8 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             align-items: center;
             gap: 8px;
             transition: all 0.3s;
+            border: none;
+            cursor: pointer;
         }
         
         .btn i {
@@ -325,19 +333,76 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
             color: var(--white);
         }
         
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        .btn-outline:hover {
+            background: var(--primary);
+            color: var(--white);
+        }
+        
         .owner-info {
             display: flex;
             align-items: center;
             gap: 15px;
             margin-top: 15px;
+            padding: 15px;
+            background: var(--light);
+            border-radius: 8px;
         }
         
-        .owner-avatar {
+        .profile-avatar {
             width: 60px;
             height: 60px;
             border-radius: 50%;
             object-fit: cover;
             border: 2px solid var(--light-gray);
+        }
+        
+        .profile-avatar-placeholder {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: var(--white);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border: 2px solid var(--light-gray);
+        }
+        
+        .owner-details h5 {
+            margin-bottom: 5px;
+            color: var(--secondary);
+        }
+        
+        .owner-details p {
+            margin-bottom: 3px;
+            color: var(--gray);
+        }
+        
+        @media (max-width: 768px) {
+            .property-details-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .room-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .owner-info {
+                flex-direction: column;
+                text-align: center;
+            }
         }
     </style>
 </head>
@@ -349,7 +414,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                 <h3>Property Details</h3>
             </div>
             <div class="nav-right">
-                <a href="index.php" class="btn">
+                <a href="index.php" class="btn btn-outline">
                     <i class="fas fa-arrow-left"></i> Back to Properties
                 </a>
             </div>
@@ -432,6 +497,7 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                         <h5><i class="fas fa-align-left"></i> Description</h5>
                         <p><?php echo nl2br(htmlspecialchars($property['description'])); ?></p>
                     </div>
+                    
                     <?php if (!empty($propertyFeatures)): ?>
                         <div class="detail-card">
                             <h5><i class="fas fa-star"></i> Features</h5>
@@ -476,14 +542,14 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                     <div class="detail-card">
                         <h5><i class="fas fa-user-tie"></i> Property Owner</h5>
                         <div class="owner-info">
-                             <?php if (!empty($profile_pic_path)): ?>
-                                <img src="<?= htmlspecialchars($profile_pic_path) ?>" class="profile-avatar me-4" alt="Profile Picture">
+                            <?php if (!empty($profile_pic_path)): ?>
+                                <img src="<?= htmlspecialchars($profile_pic_path) ?>" class="profile-avatar" alt="Profile Picture">
                             <?php else: ?>
-                                <div class="profile-avatar-placeholder me-4">
+                                <div class="profile-avatar-placeholder">
                                     <?= substr($owner['username'], 0, 1) ?>
                                 </div>
                             <?php endif; ?>
-                            <div>
+                            <div class="owner-details">
                                 <h5><?php echo htmlspecialchars($property['owner_name']); ?></h5>
                                 <p><?php echo htmlspecialchars($property['owner_email']); ?></p>
                                 <p><?php echo htmlspecialchars($property['owner_phone']); ?></p>
@@ -495,8 +561,13 @@ $profile_pic_path = getProfilePicturePath($owner['profile_picture'] ?? '');
                         <a href="edit.php?id=<?php echo $propertyId; ?>" class="btn btn-primary">
                             <i class="fas fa-edit"></i> Edit Property
                         </a>
-                        <a href="index.php" class="btn">
+                        <a href="index.php" class="btn btn-outline">
                             <i class="fas fa-arrow-left"></i> Back to Properties
                         </a>
                     </div>
-                               
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
